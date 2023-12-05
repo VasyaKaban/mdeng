@@ -9,20 +9,28 @@ set(Sources
 	hrs/expected.hpp
 	hrs/block.hpp
 	hrs/free_block_allocator.hpp
-	hrs/linear_allocator.hpp
 	hrs/debug.hpp
+	hrs/scoped_call.hpp
 	Vulkan/VulkanInclude.hpp
+	Allocator/Memory.hpp
 	Allocator/Allocator.hpp
 	Allocator/Buffer.hpp
-	Allocator/ImageBuffer.hpp
 	Allocator/MemoryType.hpp
 	Allocator/ConditionalAllocate.hpp
 	Transfer/Region.hpp
 	Transfer/Transfer.hpp
 	Transfer/BufferRegion.hpp
-	Transfer/ImageRegion.hpp
 	Transfer/EmbeddedOperation.hpp
-	FreeBlockBuffer/FreeBlockBuffer.hpp)
+	Transfer/ImageRegion.hpp
+	VulkanUtils/BufferWithProperty.hpp
+	FreeBlockBuffer/FreeBlockBuffer.hpp
+	UniformInstanceIndexBufferHub/RemoveRequest.hpp
+	UniformInstanceIndexBufferHub/AcquireRequest.hpp
+	UniformInstanceIndexBufferHub/UpdateRequest.hpp
+	UniformInstanceIndexBufferHub/UniformInstanceIndexAllocator.hpp
+	UniformInstanceIndexBufferHub/IndexPool.hpp
+	UniformInstanceIndexBufferHub/UniformInstanceIndexBufferHub.hpp
+)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG "../../out/debug/")
 

@@ -1,3 +1,9 @@
+/**
+ * @file
+ *
+ * Represents the free_block_allocator class
+ */
+
 #pragma once
 
 #include <concepts>
@@ -9,13 +15,32 @@
 
 namespace hrs
 {
+	/**
+	 * @brief The free_block_allocator class
+	 * @tparam T must satisfy unsigned_integral concept
+	 *
+	 * Allocator based on list of free blocks
+	 */
 	template<std::unsigned_integral T>
 	class free_block_allocator
 	{
 	public:
+		///same as T
 		using inner_value_type = T;
+		///the iterator type that is used inside the inner container
 		using iterator = std::list<block<T>>::iterator;
 
+		/**
+		 * @brief free_block_allocator
+		 * @param _block_size the size of block
+		 * @param blocks_count a count of blocks with _block_size
+		 *
+		 * Creates new free_block_allocator with one block with zero offset and
+		 * size equal to memory_size where memory_size is:
+		 * @code
+		 *	memory_size = _block_size * blocks_count;
+		 * @endcode
+		 */
 		free_block_allocator(T _block_size, T blocks_count)
 		{
 			assert_true_debug(is_power_of_two(_block_size), "Block size must be power of 2!");
@@ -25,16 +50,16 @@ namespace hrs
 				free_blocks.push_back(block<T>{memory_size, 0});
 		}
 
-		free_block_allocator(const free_block_allocator &l) :
-			free_blocks(l.free_blocks), memory_size(l.memory_size), block_size(l.block_size) {}
+		free_block_allocator(const free_block_allocator &l)
+			: free_blocks(l.free_blocks), memory_size(l.memory_size), block_size(l.block_size) {}
 
-		free_block_allocator(free_block_allocator &&l) noexcept :
-			free_blocks(std::move(l.free_blocks)), memory_size(l.memory_size), block_size(l.block_size)
+		free_block_allocator(free_block_allocator &&l) noexcept
+			: free_blocks(std::move(l.free_blocks)), memory_size(l.memory_size), block_size(l.block_size)
 		{
 			l.memory_size = 0;
 		}
 
-		auto operator=(const free_block_allocator &l) -> free_block_allocator &
+		free_block_allocator & operator=(const free_block_allocator &l)
 		{
 			free_blocks = l.free_blocks;
 			memory_size = l.memory_size;
@@ -42,7 +67,7 @@ namespace hrs
 			return *this;
 		}
 
-		auto operator=(free_block_allocator &&l) noexcept -> free_block_allocator &
+		free_block_allocator & operator=(free_block_allocator &&l) noexcept
 		{
 			free_blocks = std::move(l.free_blocks);
 			memory_size = l.memory_size;
@@ -51,21 +76,40 @@ namespace hrs
 			return *this;
 		}
 
-		constexpr auto get_block_size() noexcept -> T
+		/**
+		 * @brief get_block_size
+		 * @return a size of block that was previously passed to the constructor
+		 */
+		constexpr T get_block_size() const noexcept
 		{
 			return block_size;
 		}
 
+		/**
+		 * @brief operator bool
+		 *
+		 * Checks if the size of memory isn't equal to zero
+		 */
 		constexpr explicit operator bool() const noexcept
 		{
 			return memory_size != 0;
 		}
 
-		constexpr auto size() const noexcept -> T
+		/**
+		 * @brief size
+		 * @return size of memory
+		 */
+		constexpr T size() const noexcept
 		{
 			return memory_size;
 		}
 
+		/**
+		 * @brief append_space
+		 * @param added_blocks_count count of blocks to append
+		 *
+		 * Appends added_blocks_count * block_size bytes to the end of allocator
+		 */
 		auto append_space(T added_blocks_count) -> void
 		{
 			if(added_blocks_count == 0)
@@ -88,12 +132,20 @@ namespace hrs
 			memory_size += added_blocks_count * block_size;
 		}
 
-		auto get_free_blocks() const -> std::list<block<T>>
+		/**
+		 * @brief get_free_blocks
+		 * @return list of all free blocks of this allocator
+		 */
+		std::list<block<T>> get_free_blocks() const
 		{
 			return free_blocks;
 		}
 
-		auto get_free_blocks_count() const -> T
+		/**
+		 * @brief get_free_blocks_count
+		 * @return count of free blocks with size of 'block_size'
+		 */
+		T get_free_blocks_count() const noexcept
 		{
 			T blocks_count = 0;
 			for(auto &free_blk : free_blocks)
@@ -102,7 +154,15 @@ namespace hrs
 			return blocks_count;
 		}
 
-		auto clear(T new_block_size = 1, T new_blocks_count = {}) -> void
+		/**
+		 * @brief clear
+		 * @param new_block_size new size of block
+		 * @param new_blocks_count count of blocks with new_block_size size
+		 *
+		 * Clears list of free blocks and recreates allocator with new parameters
+		 * @warning Aborts when new_block_size is not a multiple of target block size!
+		 */
+		void clear(T new_block_size = 1, T new_blocks_count = {})
 		{
 			assert_true_debug(is_power_of_two(new_block_size), "Block size must be power of 2!");
 			if(new_blocks_count == 0)
@@ -119,9 +179,27 @@ namespace hrs
 			block_size = new_block_size;
 		}
 
-		auto acquire_blocks_no_append_hint(const T acq_block_size, T count) noexcept -> std::optional<iterator>
+		/**
+		 * @brief size_to_block_size
+		 * @param size size that is queried to be rounded up to block size of allocator
+		 * @return size that rounded up to alignment of the target block size
+		 */
+		T size_to_block_size(T size) const noexcept
 		{
-			assert_true_debug(is_multiple_of(acq_block_size, block_size), "Requested block size must be multiple of block_size!");
+			return round_up_size_to_alignment(size, block_size);
+		}
+
+		/**
+		 * @brief acquire_blocks_no_append_hint
+		 * @param acq_block_size size of block to acquire
+		 * @param count count of blocks with desired size
+		 * @return iterator to free block that have enough space to place blocks
+		 * @warning aborts when acq_block_size is not a multiple of target block size!
+		 */
+		std::optional<iterator> acquire_blocks_no_append_hint(T acq_block_size, T count) noexcept
+		{
+			assert_true_debug(is_multiple_of(acq_block_size, block_size),
+							  "Requested block size must be multiple of block_size!");
 			T common_size = acq_block_size * count;
 			for(auto free_block_it = free_blocks.begin(); free_block_it != free_blocks.end(); free_block_it++)
 			{
@@ -132,12 +210,26 @@ namespace hrs
 			return {};
 		}
 
-		auto acquire_blocks(const T acq_block_size, T count) -> std::pair<T, block<T>>//appended blocks count and block
+		/**
+		 * @brief acquire_blocks
+		 * @param acq_block_size size of block to acquire
+		 * @param count count of blocks with desired size
+		 * @return pair that consists of appended blocks count and block itself
+		 *
+		 * If count is zero returns empty pair.
+		 * Otherwise returns pair of zero appended blocks and acquired block if it finds free block that
+		 * satisfies requested block space.
+		 * If there are no free block with desired space then it appends a space that is not enough
+		 * and returns a pair of appended blocks and acquired block
+		 * @warning Aborts when acq_block_size is not a multiple of target block size!
+		 */
+		std::pair<T, block<T>> acquire_blocks(T acq_block_size, T count)//appended blocks count and block
 		{
 			if(count == 0)
 				return {};
 
-			assert_true_debug(is_multiple_of(acq_block_size, block_size), "Requested block size must be multiple of block_size!");
+			assert_true_debug(is_multiple_of(acq_block_size, block_size),
+							  "Requested block size must be multiple of block_size!");
 			T common_size = acq_block_size * count;
 			for(auto free_block_it = free_blocks.begin(); free_block_it != free_blocks.end(); free_block_it++)
 			{
@@ -152,32 +244,43 @@ namespace hrs
 				}
 			}
 
-			//HERE SOMETHING WRONG WITH free_blocks.size()??????????????
-			if(!free_blocks.empty() && free_blocks.back().offset + free_blocks.size() == size())
+			//can append
+			if(!free_blocks.empty() && (free_blocks.back().offset + free_blocks.size() == size()))
 			{
+				//if we have back free-block that borders with edge
 				T size_to_append = common_size - (size() - free_blocks.back().offset);
-				block<T> blk{size_to_append, free_blocks.back().offset};
+				block<T> blk{common_size, free_blocks.back().offset};
 				memory_size += size_to_append;
 				free_blocks.erase(std::prev(free_blocks.end()));
 				return {size_to_append / block_size, blk};
 			}
 			else
 			{
-				//push (block_size * count_ / block_size
+				//if we don't have border free-block
 				block<T> blk{common_size, size()};
 				memory_size += common_size;
 				return {common_size / block_size, blk};
 			}
 		}
 
-		auto release_block(const block<T> &blk) -> void
+		/**
+		 * @brief release_block
+		 * @param blk block to release
+		 *
+		 * Releases a block
+		 * @warning Aborts when block size and size + offset aren't multiple of target block size!
+		 */
+		void release_block(const block<T> &blk)
 		{
-			assert_true_debug(is_multiple_of(blk.size, block_size), "Requested block size must be multiple of block_size!");
-			assert_true_debug(is_multiple_of(blk.offset + blk.size, block_size), "Requested block offset must be multiple of block_size!");
+			assert_true_debug(is_multiple_of(blk.size, block_size),
+							  "Requested block size must be multiple of block_size!");
+			assert_true_debug(is_multiple_of(blk.offset + blk.size, block_size),
+							  "Requested block offset must be multiple of block_size!");
 
 			if(free_blocks.empty())
 			{
-				assert_true_debug(blk.offset + blk.size <= size(), "Requested block space is bigger than entire space of allocator!");
+				assert_true_debug(blk.offset + blk.size <= size(),
+								  "Requested block space is bigger than entire space of allocator!");
 				free_blocks.push_back(blk);
 				return;
 			}
@@ -223,7 +326,21 @@ namespace hrs
 			}
 		}
 
-		auto acquire_blocks_hint(const T acq_block_size, T count, iterator &hint_it) noexcept -> block<T>
+		/**
+		 * @brief acquire_blocks_hint
+		 * @param acq_block_size size of block to acquire
+		 * @param count desired count of blocks to acquire
+		 * @param hint_it hint iterator to free block that has enough space
+		 * @return acquired block
+		 *
+		 * Acquires requested block without looping over all free blocks by trying to
+		 * acquire it from hint iterator
+		 * @warning Aborts when acq_block_size is not a multiple of target block size and
+		 * when hint iterator size is smaller than common size of requested blocks!
+		 * @warning It checks hint iterator to be an iterator of target list of free blocks
+		 * and aborts when it's false only on debug build!
+		 */
+		block<T> acquire_blocks_hint(T acq_block_size, T count, iterator &hint_it) noexcept
 		{
 			if(count == 0)
 				return {};
@@ -240,21 +357,23 @@ namespace hrs
 				assert_true_debug(hint_it_found, "Hint iterator is not part of this list!");
 			#endif
 
-			assert_true_debug(is_multiple_of(acq_block_size, block_size), "Requested block size must be multiple of block_size!");
+			assert_true_debug(is_multiple_of(acq_block_size, block_size),
+								  "Requested block size must be multiple of block_size!");
 			T common_size = acq_block_size * count;
-			assert_true_debug(hint_it->size >= common_size, "Requested block size must be multiple of block_size!");
+			assert_true_debug(hint_it->size >= common_size,
+							  "Hint iterator size smaller than requested block size!");
 
 			block<T> blk{common_size, hint_it->offset};
 			hint_it->size -= common_size;
 			hint_it->offset += common_size;
 			if(hint_it->size == 0)
 				free_blocks.erase(hint_it);
-			return {0, blk};
+			return blk;
 		}
 
 	private:
-		std::list<block<T>> free_blocks;
-		T memory_size;
-		T block_size;
+		std::list<block<T>> free_blocks;///container of free blocks
+		T memory_size;///common size of all memory
+		T block_size;///size and alignment of one block
 	};
 };

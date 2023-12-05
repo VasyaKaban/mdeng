@@ -1,3 +1,9 @@
+/**
+ * @file
+ *
+ * @Represents TransferImageRegions class
+ */
+
 #pragma once
 
 #include "../Vulkan/VulkanInclude.hpp"
@@ -5,21 +11,36 @@
 
 namespace FireLand
 {
+	/**
+	 * @brief The ImageRegion class
+	 *
+	 * Helpful structure as copy structure for high-level transfer class
+	 */
 	struct ImageRegion
 	{
-		vk::BufferImageCopy copy;
-		std::size_t data_offset;
+		vk::BufferImageCopy copy;///<copy structure without source offset
+		std::size_t data_offset;///<offset within data pointer
 	};
 
+	/**
+	 * @brief The ImageRegions using
+	 *
+	 * Small optimization variant for using one RegionOffset without dynamic allocations
+	 */
 	using ImageRegions = std::variant<RegionOffset<vk::BufferImageCopy>, RegionsOffsets<vk::BufferImageCopy>>;
 
+	/**
+	 * @brief The TransferImageRegions class
+	 *
+	 * Contains information about image to transfer, regions, image format and data
+	 */
 	struct TransferImageRegions
 	{
-		vk::Image image;
-		ImageRegions regions;
-		vk::DeviceSize texel_size;
-		vk::ImageLayout layout;
-		std::byte *data;
+		vk::Image image;///<image to transfer
+		ImageRegions regions;///<transfer regions
+		vk::DeviceSize texel_size;///<image texel size
+		vk::ImageLayout layout;///<image layout
+		std::byte *data;///pointer to data
 
 		constexpr TransferImageRegions(vk::Image &_image,
 									   vk::ImageLayout _layout,
@@ -101,6 +122,38 @@ namespace FireLand
 				   copy.imageExtent.height *
 				   copy.imageExtent.depth *
 				   texel_size;
+		}
+
+		void Transfer(vk::Buffer transfer_buffer,
+					  std::byte *map_ptr,
+					  vk::CommandBuffer command_buffer) const noexcept
+		{
+			std::visit([this, &transfer_buffer, map_ptr, &command_buffer]<typename BT>(const BT &val)
+			{
+				if constexpr(std::same_as<BT, RegionOffset<vk::BufferImageCopy>>)
+				{
+					const RegionOffset<vk::BufferImageCopy> &reg = val;
+					memcpy(map_ptr + reg.region.bufferOffset, this->data + reg.offset, this->GetSize(0));
+
+					command_buffer.copyBufferToImage(transfer_buffer,
+													 this->image,
+													 this->layout,
+													 reg.region);
+				}
+				else
+				{
+					const RegionsOffsets<vk::BufferImageCopy> &regs = val;
+					for(std::size_t i = 0; i < regs.regions.size(); i++)
+						memcpy(map_ptr + regs.regions[i].bufferOffset,
+							   this->data + regs.regions_offsets[i],
+							   this->GetSize(i));
+
+					command_buffer.copyBufferToImage(transfer_buffer,
+													 this->image,
+													 this->layout,
+													 regs.regions);
+				}
+			}, regions);
 		}
 	};
 };

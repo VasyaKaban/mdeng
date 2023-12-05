@@ -1,70 +1,75 @@
+/**
+ * @file
+ *
+ * Represents buffer class of vulkan allocator
+ */
+
 #pragma once
 
 #include "../Vulkan/VulkanInclude.hpp"
 #include "../hrs/debug.hpp"
+#include "Memory.hpp"
 
 namespace FireLand
 {
+	/**
+	 * @brief The Buffer class
+	 *
+	 * Encapsulates memory and buffer
+	 */
 	struct Buffer
 	{
-		vk::DeviceMemory memory;
-		vk::Buffer buffer;
-		vk::DeviceSize size;
-		std::byte *map_ptr;
+		Memory memory;///<Device memory
+		vk::Buffer buffer;///<buffer that takes whole memory
 
-		constexpr Buffer(vk::DeviceMemory _memory = {},
-						 vk::Buffer _buffer = {},
-						 vk::DeviceSize _size = {},
-						 std::byte *_map_ptr = nullptr)
-			: memory(_memory), buffer(_buffer),
-			  size(_size), map_ptr(_map_ptr) {}
+		constexpr Buffer(Memory mem = {}, vk::Buffer _buffer = VK_NULL_HANDLE)
+			: memory(mem), buffer(_buffer) {}
 
 		constexpr Buffer(const Buffer &) noexcept = default;
 
 		constexpr Buffer(Buffer &&buf) noexcept
-			: memory(buf.memory), buffer(buf.buffer),
-			  size(buf.size), map_ptr(buf.map_ptr)
+			: memory(std::move(buf.memory)), buffer(buf.buffer)
 		{
-			buf.memory = nullptr;
-			buf.buffer = nullptr;
-			buf.size = 0;
-			buf.map_ptr = nullptr;
+			buf.buffer = VK_NULL_HANDLE;
 		}
 
-		constexpr auto operator=(const Buffer &) noexcept -> Buffer & = default;
+		constexpr Buffer & operator=(const Buffer &) noexcept = default;
 
-		constexpr auto operator=(Buffer &&buf) noexcept -> Buffer &
+		constexpr Buffer & operator=(Buffer &&buf) noexcept
 		{
-			memory = buf.memory;
+			memory =std::move(buf.memory);
 			buffer = buf.buffer;
-			size = buf.size;
-			map_ptr = buf.map_ptr;
-			buf.memory = nullptr;
-			buf.buffer = nullptr;
-			buf.size = 0;
-			buf.map_ptr = nullptr;
+			buf.buffer = VK_NULL_HANDLE;
 			return *this;
 		}
 
+		/**
+		 * @brief operator bool
+		 *
+		 * Checks whether object is created or not.
+		 * Just checks that memory and buffer aren't VK_NULL_HANDLE
+		 */
 		constexpr explicit operator bool() const noexcept
 		{
 			return memory && buffer;
 		}
 
-		constexpr auto IsMapped() const noexcept -> bool
-		{
-			return map_ptr != nullptr;
-		}
-
-		auto Destroy(vk::Device device) -> void
+		/**
+		 * @brief Destroy
+		 * @param device the device that created this buffer
+		 *
+		 * Destroys buffer and frees memory
+		 * @warning Aborts if device isn't created!
+		 */
+		void Destroy(vk::Device device)
 		{
 			if(*this)
 			{
 				hrs::assert_true_debug(device, "Device isn't created yet!");
-				if(map_ptr)
-					device.unmapMemory(memory);
 				device.destroy(buffer);
-				device.free(memory);
+				memory.Free(device);
+
+				buffer = VK_NULL_HANDLE;
 			}
 		}
 	};

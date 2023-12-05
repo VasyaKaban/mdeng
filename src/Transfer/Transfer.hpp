@@ -1,3 +1,9 @@
+/**
+ * @file
+ *
+ * Represents Transfer class for transfering data to device side
+ */
+
 #pragma once
 
 #include "../Allocator/Allocator.hpp"
@@ -20,75 +26,174 @@ namespace FireLand
 	template<std::ranges::range R, typename To>
 	constexpr inline bool RangesConvertibleValueType = std::is_convertible_v<std::ranges::range_value_t<R>, To>;
 
+	/**
+	 * @brief The TransferObject using
+	 *
+	 * Used for dynamic dispatching transfer commands
+	 */
 	using TransferObject = std::variant<TransferBufferRegions, TransferImageRegions, EmbeddedOperation>;
 
 	class Transfer
 	{
 	private:
-		Transfer(Allocator *_alloccator,
+		Transfer(Allocator *_allocator,
 				 vk::CommandPool _command_pool,
 				 vk::CommandBuffer _command_buffer,
 				 vk::Fence _fence,
 				 vk::Queue _queue,
 				 uint32_t _queue_family_index);
 	public:
-		static auto Create(Allocator &_alloccator,
-						   uint32_t _queue_family_index,
-						   uint32_t _queue_index) -> hrs::expected<Transfer, vk::Result>;
+		/**
+		 * @brief Create
+		 * @param _allocator allocator for future allocations
+		 * @param _queue_family_index family queue index
+		 * @param _queue_index queue index
+		 * @return Transfer object or error result
+		 */
+		static hrs::expected<Transfer, vk::Result>
+		Create(Allocator &_allocator,
+			   uint32_t _queue_family_index,
+			   uint32_t _queue_index);
+
 		~Transfer();
 		Transfer(const Transfer &) = delete;
 		Transfer(Transfer &&transfer) noexcept;
-		auto operator=(const Transfer &) = delete;
-		auto operator=(Transfer &&transfer) noexcept -> Transfer &;
+		Transfer & operator=(const Transfer &) = delete;
+		Transfer & operator=(Transfer &&transfer) noexcept;
 
+		/**
+		 * @brief operator bool
+		 *
+		 * Checks whether object is created or not
+		 */
 		constexpr explicit operator bool() const noexcept;
-		constexpr auto IsCreated() const noexcept -> bool;
 
-		auto IsReadyForTransfer() -> vk::Result;
-		auto Wait(uint64_t timeout = std::numeric_limits<uint64_t>::max()) -> vk::Result;
+		/**
+		 * @brief IsCreated
+		 * @return true if object is created
+		 *
+		 * Same as operator bool
+		 */
+		constexpr bool IsCreated() const noexcept;
 
+		/**
+		 * @brief IsReadyForTransfer
+		 * @return result according to vkGetFenceStatus
+		 */
+		vk::Result IsReadyForTransfer();
+
+		/**
+		 * @brief Wait
+		 * @param timeout timeout value in nanoseconds to wait
+		 * @return result value according to vkWaitForFences
+		 */
+		vk::Result Wait(uint64_t timeout = std::numeric_limits<uint64_t>::max());
+
+		/**
+		 * @brief TransferToBuffer
+		 * @tparam R type that must satisfy sized_range concept
+		 * @param regions range of buffer regions
+		 * @param dst destination buffer
+		 * @param data data pointer
+		 * @param alignment the alignment value that must be used for placing data in transfer buffer
+		 * @warning Data pointer must be alive until data is not transffered!
+		 */
 		template<std::ranges::sized_range R>
 			requires RangesSameValueType<R, BufferRegion>
-		auto TransferToBuffer(const R &regions,
+		void TransferToBuffer(const R &regions,
 							  vk::Buffer dst,
 							  std::byte *data,
-							  vk::DeviceSize alignment) -> void;
+							  vk::DeviceSize alignment);
 
+		/**
+		 * @brief TransferToImage
+		 * @tparam R type that must satisfy sized_range concept
+		 * @param regions range of image regions
+		 * @param dst destination image
+		 * @param texel_size image texel size
+		 * @param layout image layout
+		 * @param data data pointer
+		 * @param alignment the alignment value that must be used for placing data in transfer buffer
+		 * @warning Data pointer must be alive until data is not transffered!
+		 */
 		template<std::ranges::sized_range R>
 			requires RangesSameValueType<R, ImageRegion>
-		auto TransferToImage(const R &regions,
+		void TransferToImage(const R &regions,
 							 vk::Image dst,
 							 vk::DeviceSize texel_size,
 							 vk::ImageLayout layout,
 							 std::byte *data,
-							 vk::DeviceSize alignment) -> void;
+							 vk::DeviceSize alignment);
 
+
+		/**
+		 * @brief EmbedOperation
+		 * @tparam R type that must satisfy sized_range concept
+		 * @param operations range of embedded operations
+		 */
 		template<std::ranges::sized_range R>
 			requires RangesConvertibleValueType<R, EmbeddedOperation>
-		auto EmbedOperation(const R &operations) -> void;
+		void EmbedOperation(const R &operations);
 
-		auto TransferToBuffer(TransferBufferRegions &&regions, vk::DeviceSize alignment) -> void;
-		auto TransferToImage(TransferImageRegions &&regions, vk::DeviceSize alignment) -> void;
-		auto TransferAnyObject(TransferObject &&object, vk::DeviceSize alignment) -> void;
+		/**
+		 * @brief TransferToBuffer
+		 * @param regions transfer buffer regions
+		 * @param alignment the alignment value that must be used for placing data in transfer buffer
+		 */
+		void TransferToBuffer(TransferBufferRegions &&regions, vk::DeviceSize alignment);
 
+		/**
+		 * @brief TransferToImage
+		 * @param regions transfer image regions
+		 * @param alignment the alignment value that must be used for placing data in transfer buffer
+		 */
+		void TransferToImage(TransferImageRegions &&regions, vk::DeviceSize alignment);
+
+		/**
+		 * @brief TransferAnyObject
+		 * @param object object for transferring
+		 * @param alignment the alignment value that must be used for placing data in transfer buffer
+		 */
+		void TransferAnyObject(TransferObject &&object, vk::DeviceSize alignment);
+
+		/**
+		 * @brief Flush
+		 * @tparam R type that must satisfy sized_range concept
+		 * @param infos range of submit infos
+		 * @return result of allocate and transfer operations
+		 */
 		template<std::ranges::sized_range R>
 			requires RangesSameValueType<R, vk::SubmitInfo>
-		auto Flush(const R &infos) -> vk::Result;
+		vk::Result Flush(const R &infos);
 
-		constexpr auto GetBufferSize() const noexcept -> vk::DeviceSize;
-		constexpr auto GetBuffer() const noexcept -> Buffer;
-		constexpr auto GetCommandBuffer() const noexcept -> vk::CommandBuffer;
+		/**
+		 * @brief GetBufferSize
+		 * @return transfer buffer size
+		 */
+		constexpr vk::DeviceSize GetBufferSize() const noexcept;
+
+		/**
+		 * @brief GetBuffer
+		 * @return transfer buffer object
+		 */
+		constexpr Buffer GetBuffer() const noexcept;
+
+		/**
+		 * @brief GetCommandBuffer
+		 * @return command buffer object
+		 */
+		constexpr vk::CommandBuffer GetCommandBuffer() const noexcept;
 
 	private:
-		Allocator *allocator;
-		Buffer transfer_buffer;
-		vk::CommandPool command_pool;
-		vk::CommandBuffer command_buffer;
-		vk::Fence commit_fence;
-		vk::Queue commit_queue;
-		uint32_t queue_family_index;
-		std::vector<TransferObject> objects;
-		vk::DeviceSize common_size;
+		Allocator *allocator;///<pointer to allocator
+		Buffer transfer_buffer;///<transfer buffer
+		vk::CommandPool command_pool;///<command pool for command buffer
+		vk::CommandBuffer command_buffer;///<command buffer
+		vk::Fence commit_fence;///<fence for waiting on it before sending another commands
+		vk::Queue commit_queue;///<queue for commiting commands
+		uint32_t queue_family_index;///<queue family index for transfer buffer create info
+		std::vector<TransferObject> objects;///<vector of objects to transfer
+		vk::DeviceSize common_size;///<size that objects occupy at this time
 	};
 
 	inline Transfer::Transfer(Allocator *_allocator,
@@ -107,9 +212,13 @@ namespace FireLand
 		queue_family_index = _queue_family_index;
 	}
 
-	inline auto Transfer::Create(Allocator &_allocator,
-								 uint32_t _queue_family_index,
-								 uint32_t _queue_index) -> hrs::expected<Transfer, vk::Result>
+	/**
+	 * @warning Aborts if allocator isn't created!
+	 */
+	inline hrs::expected<Transfer, vk::Result>
+	Transfer::Create(Allocator &_allocator,
+					 uint32_t _queue_family_index,
+					 uint32_t _queue_index)
 	{
 		hrs::assert_true_debug(_allocator.IsCreated(), "Allocator isn't created yet!");
 		vk::Device device = _allocator.GetDevice();
@@ -154,6 +263,9 @@ namespace FireLand
 						_queue_family_index);
 	}
 
+	/**
+	 * @warning Aborts on release if wait result doesn't match vk::Result::eSuccess!
+	 */
 	inline Transfer::~Transfer()
 	{
 		if(*this)
@@ -172,6 +284,9 @@ namespace FireLand
 		}
 	}
 
+	/**
+	 * @warning Aborts if Wait on this and wait on transfer don't match vk::Result::eSuccess!
+	 */
 	inline Transfer::Transfer(Transfer &&transfer) noexcept
 	{
 		hrs::assert_true_debug(Wait() == vk::Result::eSuccess, "Unexpected wait result!");
@@ -186,6 +301,9 @@ namespace FireLand
 		common_size = transfer.common_size;
 	}
 
+	/**
+	 * @warning Aborts if Wait on this donesn't match vk::Result::eSuccess!
+	 */
 	inline auto Transfer::operator=(Transfer &&transfer) noexcept -> Transfer &
 	{
 		vk::Result wait_result = Wait();
@@ -215,12 +333,12 @@ namespace FireLand
 			   commit_queue;
 	}
 
-	constexpr auto Transfer::IsCreated() const noexcept -> bool
+	constexpr bool Transfer::IsCreated() const noexcept
 	{
 		return static_cast<bool>(*this);
 	}
 
-	inline auto Transfer::IsReadyForTransfer() -> vk::Result
+	inline vk::Result Transfer::IsReadyForTransfer()
 	{
 		if(!IsCreated())
 			return vk::Result::eSuccess;
@@ -228,7 +346,7 @@ namespace FireLand
 		return allocator->GetDevice().getFenceStatus(commit_fence);
 	}
 
-	inline auto Transfer::Wait(uint64_t timeout) -> vk::Result
+	inline vk::Result Transfer::Wait(uint64_t timeout)
 	{
 		if(!IsCreated())
 			return vk::Result::eSuccess;
@@ -236,12 +354,15 @@ namespace FireLand
 		return allocator->GetDevice().waitForFences(commit_fence, VK_TRUE, timeout);
 	}
 
+	/**
+	 * @warning Aborts if alignment is not power of two
+	 */
 	template<std::ranges::sized_range R>
 		requires RangesSameValueType<R, BufferRegion>
-	auto Transfer::TransferToBuffer(const R &regions,
+	void Transfer::TransferToBuffer(const R &regions,
 									vk::Buffer dst,
 									std::byte *data,
-									vk::DeviceSize alignment) -> void
+									vk::DeviceSize alignment)
 	{
 		hrs::assert_true_debug(hrs::is_power_of_two(alignment), "Alignment isn't power of two!");
 		if(std::ranges::size(regions) == 0)
@@ -268,14 +389,17 @@ namespace FireLand
 		objects.push_back(TransferBufferRegions(dst, std::move(copy_regions), std::move(regions_offsets), data));
 	}
 
+	/**
+	 * @warning Aborts if alignment is not power of two
+	 */
 	template<std::ranges::sized_range R>
 		requires RangesSameValueType<R, ImageRegion>
-	auto Transfer::TransferToImage(const R &regions,
+	void Transfer::TransferToImage(const R &regions,
 								   vk::Image dst,
 								   vk::DeviceSize texel_size,
 								   vk::ImageLayout layout,
 								   std::byte *data,
-								   vk::DeviceSize alignment) -> void
+								   vk::DeviceSize alignment)
 	{
 		if(texel_size == 0)
 			return;
@@ -311,7 +435,7 @@ namespace FireLand
 
 	template<std::ranges::sized_range R>
 		requires RangesConvertibleValueType<R, EmbeddedOperation>
-	auto Transfer::EmbedOperation(const R &operations) -> void
+	void Transfer::EmbedOperation(const R &operations)
 	{	
 		std::size_t operations_size = std::ranges::size(operations);
 		if(operations_size == 0)
@@ -324,7 +448,11 @@ namespace FireLand
 			objects.push_back(EmbeddedOperation(op));
 	}
 
-	inline auto Transfer::TransferToBuffer(TransferBufferRegions &&regions, vk::DeviceSize alignment) -> void
+	/**
+	 * @warning Aborts if alignment is not power of two and
+	 * if regions and offsets sizes aren't equal to each other!
+	 */
+	inline void Transfer::TransferToBuffer(TransferBufferRegions &&regions, vk::DeviceSize alignment)
 	{
 		hrs::assert_true_debug(hrs::is_power_of_two(alignment), "Alignment isn't power of two!");
 		std::visit([alignment = alignment, this, &regions]<typename BT>(BT &value)
@@ -356,7 +484,11 @@ namespace FireLand
 		}, regions.regions);
 	}
 
-	inline auto Transfer::TransferToImage(TransferImageRegions &&regions, vk::DeviceSize alignment) -> void
+	/**
+	 * @warning Aborts if alignment is not power of two and
+	 * if regions and offsets sizes aren't equal to each other!
+	 */
+	inline void Transfer::TransferToImage(TransferImageRegions &&regions, vk::DeviceSize alignment)
 	{
 		hrs::assert_true_debug(hrs::is_power_of_two(alignment), "Alignment isn't power of two!");
 		std::visit([alignment = alignment, this, &regions]<typename BT>(BT &value)
@@ -389,7 +521,7 @@ namespace FireLand
 		}, regions.regions);
 	}
 
-	inline auto Transfer::TransferAnyObject(TransferObject &&object, vk::DeviceSize alignment) -> void
+	inline void Transfer::TransferAnyObject(TransferObject &&object, vk::DeviceSize alignment)
 	{
 		std::visit([alignment = alignment, this]<typename T>(T &obj)
 		{
@@ -397,14 +529,14 @@ namespace FireLand
 				TransferToBuffer(std::move(obj), alignment);
 			else if constexpr(std::same_as<T, TransferImageRegions>)
 				TransferToImage(std::move(obj), alignment);
-			else
+			else if constexpr(std::same_as<T, EmbeddedOperation>)
 				EmbedOperation(std::ranges::single_view{std::move(obj)});
 		}, object);
 	}
 
 	template<std::ranges::sized_range R>
 		requires RangesSameValueType<R, vk::SubmitInfo>
-	auto Transfer::Flush(const R &infos) -> vk::Result
+	vk::Result Transfer::Flush(const R &infos)
 	{
 		if(objects.empty())
 			return vk::Result::eSuccess;
@@ -413,7 +545,7 @@ namespace FireLand
 			return wait_res;
 
 		//resize
-		if(transfer_buffer && transfer_buffer.size < common_size)
+		if(transfer_buffer && transfer_buffer.memory.size < common_size)
 			transfer_buffer.Destroy(allocator->GetDevice());
 
 		if(!transfer_buffer)
@@ -427,8 +559,8 @@ namespace FireLand
 
 			constexpr static std::array transfer_conds
 			{
-				AllocateConditionlInfo{DesiredType::Only, vk::MemoryPropertyFlagBits::eHostVisible, true},
-				AllocateConditionlInfo{DesiredType::Any, vk::MemoryPropertyFlagBits::eHostVisible, true},
+				AllocateConditionalInfo{DesiredType::Only, vk::MemoryPropertyFlagBits::eHostVisible, true},
+				AllocateConditionalInfo{DesiredType::Any, vk::MemoryPropertyFlagBits::eHostVisible, true},
 			};
 
 			auto alloc_result = AllocateBuffer(*allocator, transfer_conds, buffer_info);
@@ -451,66 +583,14 @@ namespace FireLand
 				if constexpr(std::same_as<T, TransferBufferRegions>)
 				{
 					const TransferBufferRegions &buffer_regions = value;
-					std::visit([this, &buffer_regions]<typename BT>(const BT &val)
-					{
-						if constexpr(std::same_as<BT, RegionOffset<vk::BufferCopy>>)
-						{
-							const RegionOffset<vk::BufferCopy> &reg = val;
-							memcpy(transfer_buffer.map_ptr + reg.region.srcOffset,
-								   buffer_regions.data + reg.offset,
-								   reg.region.size);
-
-							command_buffer.copyBuffer(transfer_buffer.buffer,
-													  buffer_regions.buffer,
-													  reg.region);
-						}
-						else
-						{
-							const RegionsOffsets<vk::BufferCopy> &regs = val;
-							for(std::size_t i = 0; i < regs.regions.size(); i++)
-								memcpy(transfer_buffer.map_ptr + regs.regions[i].srcOffset,
-									   buffer_regions.data + regs.regions_offsets[i],
-									   regs.regions[i].size);
-
-							command_buffer.copyBuffer(transfer_buffer.buffer,
-													  buffer_regions.buffer,
-													  regs.regions);
-						}
-					}, buffer_regions.regions);
+					buffer_regions.Transfer(transfer_buffer.buffer, transfer_buffer.memory.map_ptr, command_buffer);
 				}
 				else if constexpr(std::same_as<T, TransferImageRegions>)
 				{
 					const TransferImageRegions &image_regions = value;
-					std::visit([this, &image_regions]<typename BT>(const BT &val)
-					{
-						if constexpr(std::same_as<BT, RegionOffset<vk::BufferImageCopy>>)
-						{
-							const RegionOffset<vk::BufferImageCopy> &reg = val;
-							memcpy(transfer_buffer.map_ptr + reg.region.bufferOffset,
-								   image_regions.data + reg.offset,
-								   image_regions.GetSize(0));
-
-							command_buffer.copyBufferToImage(transfer_buffer.buffer,
-															 image_regions.image,
-															 image_regions.layout,
-															 reg.region);
-						}
-						else
-						{
-							const RegionsOffsets<vk::BufferImageCopy> &regs = val;
-							for(std::size_t i = 0; i < regs.regions.size(); i++)
-								memcpy(transfer_buffer.map_ptr + regs.regions[i].bufferOffset,
-									   image_regions.data + regs.regions_offsets[i],
-									   image_regions.GetSize(i));
-
-							command_buffer.copyBufferToImage(transfer_buffer.buffer,
-															 image_regions.image,
-															 image_regions.layout,
-															 regs.regions);
-						}
-					}, image_regions.regions);
+					image_regions.Transfer(transfer_buffer.buffer, transfer_buffer.memory.map_ptr, command_buffer);
 				}
-				else//embedded operation
+				else if constexpr(std::same_as<T, EmbeddedOperation>)
 				{
 					const EmbeddedOperation &op = value;
 					if(op)
@@ -554,17 +634,17 @@ namespace FireLand
 		return vk::Result::eSuccess;
 	}
 
-	constexpr auto Transfer::GetBufferSize() const noexcept -> vk::DeviceSize
+	constexpr vk::DeviceSize Transfer::GetBufferSize() const noexcept
 	{
-		return transfer_buffer.size;
+		return transfer_buffer.memory.size;
 	}
 
-	constexpr auto Transfer::GetBuffer() const noexcept -> Buffer
+	constexpr Buffer Transfer::GetBuffer() const noexcept
 	{
 		return transfer_buffer;
 	}
 
-	constexpr auto Transfer::GetCommandBuffer() const noexcept -> vk::CommandBuffer
+	constexpr vk::CommandBuffer Transfer::GetCommandBuffer() const noexcept
 	{
 		return command_buffer;
 	}

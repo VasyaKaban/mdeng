@@ -1,3 +1,5 @@
 build/*
 out/*
 src/CMakeLists.txt.user
+docs/*
+

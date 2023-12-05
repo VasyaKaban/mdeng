@@ -96,7 +96,7 @@ auto TestVk() -> vk::Result
 
 	FreeBlockBuffer free_block_buffer = std::move(free_blk_buf.value());
 
-	auto host_buf = allocator.AllocateBufferAny(host_buffer_info, vk::MemoryPropertyFlagBits::eHostVisible, true);
+	auto host_buf = allocator.AllocateAny(vk::MemoryPropertyFlagBits::eHostVisible, host_buffer_info, true);
 	if(!host_buf.has_value())
 		return vk::Result::eErrorOutOfHostMemory;
 
@@ -162,7 +162,7 @@ auto TestVk() -> vk::Result
 		return res;
 
 	for(std::size_t i = 0; i < BUFFER_SIZE / 4; i++)
-		cout<<reinterpret_cast<uint32_t *>(host_buffer.map_ptr)[i]<<endl;
+		cout<<reinterpret_cast<uint32_t *>(host_buffer.memory.map_ptr)[i]<<endl;
 
 	DUAregions clear_dua;
 	std::vector<hrs::block<vk::DeviceSize>> delete_regions =

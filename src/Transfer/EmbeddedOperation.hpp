@@ -1,3 +1,9 @@
+/**
+ * @file
+ *
+ * Represents EmbeddedOperation
+ */
+
 #pragma once
 
 #include "../Vulkan/VulkanInclude.hpp"
@@ -5,5 +11,10 @@
 
 namespace FireLand
 {
-	using EmbeddedOperation = std::function<auto (const vk::CommandBuffer &) -> void>;
+	/**
+	 * @brief The EmbeddedOperation using
+	 *
+	 * Used for making operation between transfer operations (like making a barrier)
+	 */
+	using EmbeddedOperation = std::function<void (const vk::CommandBuffer &)>;
 };

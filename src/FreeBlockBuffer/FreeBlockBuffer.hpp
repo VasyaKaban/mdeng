@@ -1,3 +1,8 @@
+/**
+ * @file
+ *
+ * Represents FreeBlockBuffer class
+ */
 #pragma once
 
 /*
@@ -75,107 +80,214 @@ if(allocation is !device_local)
 
 #include "../hrs/free_block_allocator.hpp"
 #include "../Transfer/Transfer.hpp"
+#include "../VulkanUtils/BufferWithProperty.hpp"
 
 namespace FireLand
 {
+	/**
+	 * @brief The UpdateRegion class
+	 *
+	 * Introduces region for update operation
+	 */
 	struct UpdateRegion
 	{
-		std::byte *data;
-		hrs::block<vk::DeviceSize> update_region;
-		vk::DeviceSize data_offset;
+		std::byte *data;///<pointer to data
+		hrs::block<vk::DeviceSize> update_region;///<region which is needed to be updated
+		vk::DeviceSize data_offset;///<offset within data pointer
 	};
 
+	/**
+	 * @brief The AddRegion class
+	 *
+	 * Introduces data add operation
+	 */
 	struct AddRegion
 	{
-		std::byte *data;
-		vk::DeviceSize data_offset;
-		vk::DeviceSize data_size;
+		std::byte *data;///<pointer to data
+		vk::DeviceSize data_offset;///<offset within data pointer
+		vk::DeviceSize data_size;///<size of data to add
 	};
 
+	/**
+	 * @brief The DUAregions class
+	 *
+	 * Compound structure that includes delete, update and add regions
+	 */
 	struct DUAregions
 	{
-		std::vector<hrs::block<vk::DeviceSize>> delete_regions;
-		std::vector<UpdateRegion> update_regions;
-		std::vector<AddRegion> add_regions;
+		std::vector<hrs::block<vk::DeviceSize>> delete_regions;///<regions to delete
+		std::vector<UpdateRegion> update_regions;///<regions to update
+		std::vector<AddRegion> add_regions;///<regions to add
 	};
 
+	/**
+	 * @brief The Commands class
+	 *
+	 * Structure that contains array of added blocks for add operations and commands
+	 * that must be executed to make data transfer
+	 */
 	struct Commands
 	{
+		/**
+		 * @brief The BufferState enum
+		 *
+		 * Carries new buffer state after operations
+		 */
 		enum BufferState
 		{
-			None,
-			NewDeviceAllocation,
-			NewHostAllocation
-		} state;
+			None,///<no event(no allocations)
+			NewDeviceAllocation,///<buffer was reallocated in device memory
+			NewHostAllocation///<buffer was reallocated in host memory
+		} state;///<buffer state
 
-		std::vector<hrs::block<vk::DeviceSize>> added_blocks;
-		std::vector<TransferObject> commands_chain;
+		std::vector<hrs::block<vk::DeviceSize>> added_blocks;///<blocks for add operations
+		std::vector<TransferObject> commands_chain;///<transfer commands
 	};
 
-	struct BufferWithProperty
-	{
-		Buffer buffer_memory;
-		vk::MemoryPropertyFlags prop_flags;
-
-		BufferWithProperty() = default;
-		BufferWithProperty(BufferWithProperty &&buf) noexcept = default;
-		BufferWithProperty(Buffer &&_buffer_memory, vk::MemoryPropertyFlags _prop_flags)
-			: buffer_memory(std::move(_buffer_memory)), prop_flags(_prop_flags) {}
-
-		constexpr auto operator=(BufferWithProperty &&buf) noexcept -> BufferWithProperty & = default;
-	};
-
+	/**
+	 * @brief The FreeBlockBuffer class
+	 *
+	 * FreeBlockBuffer is a buffer that control it's data through free block buffer.
+	 * The data is this buffer can be removed and added in any order but it causes a data fragmentation!
+	 * Also this buffer became an owner of two buffers: target and vault.
+	 * Target buffer is a buffer that is in use at this time.
+	 * Vault buffer is a buffer that was a target buffer but it has been swapped and still carries
+	 * data that aren't transferred yet. This buffer will be freed after next ReceiveCommands call.
+	 */
 	class FreeBlockBuffer
 	{
 	private:
+		/**
+		 * @brief FreeBlockBuffer
+		 * @param _allocator allocator that will be used for memory allocations
+		 * @param _buffer allocated target buffer
+		 * @param _blocks free_block_allocator for this buffer
+		 * @param _usage buffer usage for buffer create info
+		 * @param _queue_family_index queue family index for bffer create info
+		 */
 		FreeBlockBuffer(Allocator *_allocator,
 						BufferWithProperty &&_buffer,
 						hrs::free_block_allocator<vk::DeviceSize> &&_blocks,
 						vk::BufferUsageFlags _usage,
 						uint32_t _queue_family_index);
 	public:
-		static auto Create(Allocator *_allocator,
-						   vk::DeviceSize _alignnment,
-						   vk::DeviceSize _blocks_count,
-						   vk::BufferUsageFlags _usage,
-						   uint32_t _queue_family_index) -> hrs::expected<FreeBlockBuffer, vk::Result>;
+		/**
+		 * @brief Create
+		 * @param _allocator allocator that will be used for memory allocations
+		 * @param _alignnment buffer block alignment(same as block size)
+		 * @param _blocks_count count of blocks that buffer will have at startup
+		 * @param _usage buffer usage for buffer create info
+		 * @param _queue_family_index queue family index for bffer create info
+		 * @return Created FreeBlockBuffer or result error
+		 */
+		static hrs::expected<FreeBlockBuffer, vk::Result>
+		Create(Allocator *_allocator,
+			   vk::DeviceSize _alignnment,
+			   vk::DeviceSize _blocks_count,
+			   vk::BufferUsageFlags _usage,
+			   uint32_t _queue_family_index);
 
 		~FreeBlockBuffer();
 		FreeBlockBuffer(const FreeBlockBuffer &) = delete;
 		FreeBlockBuffer(FreeBlockBuffer &&buf) noexcept;
-		auto operator=(const FreeBlockBuffer &) -> FreeBlockBuffer & = delete;
-		auto operator=(FreeBlockBuffer &&buf) noexcept -> FreeBlockBuffer &;
+		FreeBlockBuffer & operator=(const FreeBlockBuffer &) = delete;
+		FreeBlockBuffer & operator=(FreeBlockBuffer &&buf) noexcept;
 
-		constexpr auto GetTargetMemoryProperty() const noexcept -> vk::MemoryPropertyFlags;
-		constexpr auto GetBuffer() noexcept -> Buffer;
-		constexpr auto GetVaultBuffer() noexcept -> Buffer;
+		/**
+		 * @brief GetTargetMemoryProperty
+		 * @return target buffer memory property flags
+		 */
+		constexpr vk::MemoryPropertyFlags GetTargetMemoryProperty() const noexcept;
 
-		auto ReceiveCommands(const DUAregions &regions) -> hrs::expected<Commands, vk::Result>;
-		constexpr auto IsCreated() const noexcept -> bool;
-		constexpr auto GetSize() const noexcept -> vk::DeviceSize;
-		constexpr auto GetVaultMemoryProperty() const noexcept -> vk::MemoryPropertyFlags;
-		auto DestroyVaultBuffer() noexcept -> void;
+		/**
+		 * @brief GetBuffer
+		 * @return target buffer
+		 */
+		constexpr Buffer GetBuffer() noexcept;
+
+		/**
+		 * @brief GetVaultBuffer
+		 * @return vault buffer
+		 */
+		constexpr Buffer GetVaultBuffer() noexcept;
+
+		/**
+		 * @brief ReceiveCommands
+		 * @param regions regions that describe add/update/delete operations
+		 * @return Commands structure for transfer or error result
+		 */
+		hrs::expected<Commands, vk::Result> ReceiveCommands(const DUAregions &regions);
+
+		/**
+		 * @brief IsCreated
+		 * @return Checcks whether buffer is created or not
+		 */
+		constexpr bool IsCreated() const noexcept;
+
+		/**
+		 * @brief GetSize
+		 * @return size of target buffer
+		 */
+		constexpr vk::DeviceSize GetSize() const noexcept;
+
+		/**
+		 * @brief GetVaultMemoryProperty
+		 * @return vault buffer memory property flags
+		 */
+		constexpr vk::MemoryPropertyFlags GetVaultMemoryProperty() const noexcept;
+
+		/**
+		 * @brief DestroyVaultBuffer
+		 *
+		 * Explicitly destroys and frees vault buffer
+		 */
+		void DestroyVaultBuffer() noexcept;
 
 	private:
-		auto transfer_adds(Commands &commands,
+
+		/**
+		 * @brief transfer_adds
+		 * @param commands Commands structure where new commands will be placed
+		 * @param add_regions regions to add
+		 * @param added_blocks free block buffer allocated blocks per each region
+		 *
+		 * Prepares transfer commands for add operations
+		 */
+		void transfer_adds(Commands &commands,
 						   const std::vector<AddRegion> &add_regions,
-						   const std::vector<hrs::block<vk::DeviceSize>> &added_blocks) -> void;
+						   const std::vector<hrs::block<vk::DeviceSize>> &added_blocks);
 
-		auto transfer_updates(Commands &commands,
-							  const std::vector<UpdateRegion> &update_regions) -> void;
+		/**
+		 * @brief transfer_updates
+		 * @param commands Commands structure where new commands will be placed
+		 * @param update_regions regions to update
+		 *
+		 * Preapares transfer commands for update operations
+		 */
+		void transfer_updates(Commands &commands,
+							  const std::vector<UpdateRegion> &update_regions);
 
-		static auto allocate_buffer(Allocator *_allocator,
-									vk::BufferUsageFlags _usage,
-									std::uint32_t _queue_family_index,
-									vk::DeviceSize _size) -> hrs::expected<BufferWithProperty, vk::Result>;
+		/**
+		 * @brief allocate_buffer
+		 * @param _allocator allocator that will be used for memory allocations
+		 * @param _usage buffer usage for buffer create info
+		 * @param _queue_family_index queue family index for bffer create info
+		 * @param _size size of buffer
+		 * @return allocated buffer with it's memory property flags or error result
+		 */
+		static hrs::expected<BufferWithProperty, vk::Result>
+		allocate_buffer(Allocator *_allocator,
+						vk::BufferUsageFlags _usage,
+						std::uint32_t _queue_family_index,
+						vk::DeviceSize _size);
 
 	private:
-		Allocator *allocator;
-		BufferWithProperty buffer;
-		BufferWithProperty vault_buffer;
-		hrs::free_block_allocator<vk::DeviceSize> blocks;
-		vk::BufferUsageFlags usage;
-		uint32_t queue_family_index;
+		Allocator *allocator;///<allocator for buffer allocation
+		BufferWithProperty buffer;///<target buffer
+		BufferWithProperty vault_buffer;///<vault buffer
+		hrs::free_block_allocator<vk::DeviceSize> blocks;///<free block allocator that manages free blocks
+		vk::BufferUsageFlags usage;///<target buffer usage flags
+		uint32_t queue_family_index;///<queue family index for buffer create info
 	};
 
 	FreeBlockBuffer::FreeBlockBuffer(Allocator *_allocator,
@@ -189,11 +301,12 @@ namespace FireLand
 		  usage(_usage),
 		  queue_family_index(_queue_family_index){}
 
-	auto FreeBlockBuffer::Create(Allocator *_allocator,
-								 vk::DeviceSize _alignnment,
-								 vk::DeviceSize _blocks_count,
-								 vk::BufferUsageFlags _usage,
-								 uint32_t _queue_family_index) -> hrs::expected<FreeBlockBuffer, vk::Result>
+	hrs::expected<FreeBlockBuffer, vk::Result>
+	FreeBlockBuffer::Create(Allocator *_allocator,
+							vk::DeviceSize _alignnment,
+							vk::DeviceSize _blocks_count,
+							vk::BufferUsageFlags _usage,
+							uint32_t _queue_family_index)
 	{
 		hrs::assert_true_debug(_allocator != nullptr, "Allocator isn't created yet!");
 		hrs::assert_true_debug(hrs::is_power_of_two(_alignnment), "Alignment is not power of two!");
@@ -233,7 +346,7 @@ namespace FireLand
 		buf.allocator = nullptr;
 	}
 
-	auto FreeBlockBuffer::operator=(FreeBlockBuffer &&buf) noexcept -> FreeBlockBuffer &
+	FreeBlockBuffer & FreeBlockBuffer::operator=(FreeBlockBuffer &&buf) noexcept
 	{
 		this->~FreeBlockBuffer();
 		allocator = buf.allocator;
@@ -245,22 +358,22 @@ namespace FireLand
 		return *this;
 	}
 
-	constexpr auto FreeBlockBuffer::GetTargetMemoryProperty() const noexcept -> vk::MemoryPropertyFlags
+	constexpr vk::MemoryPropertyFlags FreeBlockBuffer::GetTargetMemoryProperty() const noexcept
 	{
 		return buffer.prop_flags;
 	}
 
-	constexpr auto FreeBlockBuffer::GetBuffer() noexcept -> Buffer
+	constexpr Buffer FreeBlockBuffer::GetBuffer() noexcept
 	{
 		return buffer.buffer_memory;
 	}
 
-	constexpr auto FreeBlockBuffer::GetVaultBuffer() noexcept -> Buffer
+	constexpr Buffer FreeBlockBuffer::GetVaultBuffer() noexcept
 	{
 		return vault_buffer.buffer_memory;
 	}
 
-	auto FreeBlockBuffer::ReceiveCommands(const DUAregions &regions) -> hrs::expected<Commands, vk::Result>
+	hrs::expected<Commands, vk::Result> FreeBlockBuffer::ReceiveCommands(const DUAregions &regions)
 	{
 		if(vault_buffer.buffer_memory)
 			vault_buffer.buffer_memory.Destroy(allocator->GetDevice());
@@ -274,8 +387,8 @@ namespace FireLand
 		for(const auto &add_region : regions.add_regions)
 		{
 			auto [app_block_count, app_block] = blocks.acquire_blocks(hrs::round_up_size_to_alignment(
-															  blocks.get_block_size(),
-															  add_region.data_size), 1);
+																		  add_region.data_size,
+																		  blocks.get_block_size()), 1);
 
 			appended_size += app_block_count * blocks.get_block_size();
 			added_blocks.push_back(app_block);
@@ -309,7 +422,7 @@ namespace FireLand
 			auto copy_from_old = [&old_buffer = vault_buffer, &new_buffer = buffer]
 				(const vk::CommandBuffer &buf) -> void
 			{
-				vk::BufferCopy copy(0, 0, old_buffer.buffer_memory.size);
+				vk::BufferCopy copy(0, 0, old_buffer.buffer_memory.memory.size);
 				buf.copyBuffer(old_buffer.buffer_memory.buffer,
 							   new_buffer.buffer_memory.buffer,
 							   copy);
@@ -317,7 +430,7 @@ namespace FireLand
 
 			if(regions.update_regions.empty())
 			{
-				//w/o updates
+				//without updates
 				commands.commands_chain.reserve(regions.add_regions.size() + 1);
 				commands.commands_chain.push_back(copy_from_old);
 				transfer_adds(commands, regions.add_regions, added_blocks);
@@ -338,7 +451,7 @@ namespace FireLand
 													VK_QUEUE_FAMILY_IGNORED,
 													new_buffer.buffer_memory.buffer,
 													0,
-													old_buffer.buffer_memory.size);
+													old_buffer.buffer_memory.memory.size);
 
 					buf.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
 										vk::PipelineStageFlagBits::eTransfer,
@@ -356,37 +469,33 @@ namespace FireLand
 		return commands;
 	}
 
-	constexpr auto FreeBlockBuffer::IsCreated() const noexcept -> bool
+	constexpr bool FreeBlockBuffer::IsCreated() const noexcept
 	{
 		return allocator != nullptr && buffer.buffer_memory.buffer;
 	}
 
-	constexpr auto FreeBlockBuffer::GetSize() const noexcept -> vk::DeviceSize
+	constexpr vk::DeviceSize FreeBlockBuffer::GetSize() const noexcept
 	{
 		return blocks.size();
 	}
 
-	constexpr auto FreeBlockBuffer::GetVaultMemoryProperty() const noexcept -> vk::MemoryPropertyFlags
+	constexpr vk::MemoryPropertyFlags FreeBlockBuffer::GetVaultMemoryProperty() const noexcept
 	{
 		return vault_buffer.prop_flags;
 	}
 
-	auto FreeBlockBuffer::DestroyVaultBuffer() noexcept -> void
+	void FreeBlockBuffer::DestroyVaultBuffer() noexcept
 	{
 		if(!IsCreated())
 			return;
 
 		vault_buffer.buffer_memory.Destroy(allocator->GetDevice());
 		vault_buffer.prop_flags = {};
-		vault_buffer.buffer_memory.buffer = nullptr;
-		vault_buffer.buffer_memory.memory = nullptr;
-		vault_buffer.buffer_memory.map_ptr = nullptr;
-		vault_buffer.buffer_memory.size = 0;
 	}
 
-	auto FreeBlockBuffer::transfer_adds(Commands &commands,
+	void FreeBlockBuffer::transfer_adds(Commands &commands,
 										const std::vector<AddRegion> &add_regions,
-										const std::vector<hrs::block<vk::DeviceSize>> &added_blocks) -> void
+										const std::vector<hrs::block<vk::DeviceSize>> &added_blocks)
 	{
 		if(add_regions.size() == 1)
 		{
@@ -419,8 +528,8 @@ namespace FireLand
 		}
 	}
 
-	auto FreeBlockBuffer::transfer_updates(Commands &commands,
-										   const std::vector<UpdateRegion> &update_regions) -> void
+	void FreeBlockBuffer::transfer_updates(Commands &commands,
+										   const std::vector<UpdateRegion> &update_regions)
 	{
 		if(update_regions.size() == 1)
 		{
@@ -456,10 +565,11 @@ namespace FireLand
 		}
 	}
 
-	auto FreeBlockBuffer::allocate_buffer(Allocator *_allocator,
-										  vk::BufferUsageFlags _usage,
-										  std::uint32_t _queue_family_index,
-										  vk::DeviceSize _size) -> hrs::expected<BufferWithProperty, vk::Result>
+	hrs::expected<BufferWithProperty, vk::Result>
+	FreeBlockBuffer::allocate_buffer(Allocator *_allocator,
+									 vk::BufferUsageFlags _usage,
+									 std::uint32_t _queue_family_index,
+									 vk::DeviceSize _size)
 	{
 		_usage |= vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eTransferSrc;
 		vk::BufferCreateInfo buffer_info({},
@@ -472,9 +582,9 @@ namespace FireLand
 
 		constexpr static std::array buffer_conds =
 		{
-			AllocateConditionlInfo{DesiredType::Only, vk::MemoryPropertyFlagBits::eDeviceLocal, false},
-			AllocateConditionlInfo{DesiredType::Any, vk::MemoryPropertyFlagBits::eDeviceLocal, false},
-			AllocateConditionlInfo{DesiredType::Any, vk::MemoryPropertyFlagBits::eHostVisible, false}
+			AllocateConditionalInfo{DesiredType::Only, vk::MemoryPropertyFlagBits::eDeviceLocal, false},
+			AllocateConditionalInfo{DesiredType::Any, vk::MemoryPropertyFlagBits::eDeviceLocal, false},
+			AllocateConditionalInfo{DesiredType::Any, vk::MemoryPropertyFlagBits::eHostVisible, false}
 		};
 
 		auto allocated_buffer = AllocateBuffer(*_allocator, buffer_conds, buffer_info);
