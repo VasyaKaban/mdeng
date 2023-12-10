@@ -94,15 +94,14 @@ namespace FireLand
 		 * @tparam R type that must satisfy sized_range concept
 		 * @param regions range of buffer regions
 		 * @param dst destination buffer
-		 * @param data data pointer
+		 * @param data data to transfer
 		 * @param alignment the alignment value that must be used for placing data in transfer buffer
-		 * @warning Data pointer must be alive until data is not transffered!
 		 */
 		template<std::ranges::sized_range R>
 			requires RangesSameValueType<R, BufferRegion>
 		void TransferToBuffer(const R &regions,
 							  vk::Buffer dst,
-							  std::byte *data,
+							  Data data,
 							  vk::DeviceSize alignment);
 
 		/**
@@ -112,7 +111,7 @@ namespace FireLand
 		 * @param dst destination image
 		 * @param texel_size image texel size
 		 * @param layout image layout
-		 * @param data data pointer
+		 * @param data data to transfer
 		 * @param alignment the alignment value that must be used for placing data in transfer buffer
 		 * @warning Data pointer must be alive until data is not transffered!
 		 */
@@ -122,7 +121,7 @@ namespace FireLand
 							 vk::Image dst,
 							 vk::DeviceSize texel_size,
 							 vk::ImageLayout layout,
-							 std::byte *data,
+							 Data data,
 							 vk::DeviceSize alignment);
 
 
@@ -361,7 +360,7 @@ namespace FireLand
 		requires RangesSameValueType<R, BufferRegion>
 	void Transfer::TransferToBuffer(const R &regions,
 									vk::Buffer dst,
-									std::byte *data,
+									Data data,
 									vk::DeviceSize alignment)
 	{
 		hrs::assert_true_debug(hrs::is_power_of_two(alignment), "Alignment isn't power of two!");
@@ -398,7 +397,7 @@ namespace FireLand
 								   vk::Image dst,
 								   vk::DeviceSize texel_size,
 								   vk::ImageLayout layout,
-								   std::byte *data,
+								   Data data,
 								   vk::DeviceSize alignment)
 	{
 		if(texel_size == 0)

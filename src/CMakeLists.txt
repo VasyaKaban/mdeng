@@ -22,14 +22,24 @@ set(Sources
 	Transfer/BufferRegion.hpp
 	Transfer/EmbeddedOperation.hpp
 	Transfer/ImageRegion.hpp
+	Transfer/Data.hpp
 	VulkanUtils/BufferWithProperty.hpp
 	FreeBlockBuffer/FreeBlockBuffer.hpp
-	UniformInstanceIndexBufferHub/RemoveRequest.hpp
-	UniformInstanceIndexBufferHub/AcquireRequest.hpp
-	UniformInstanceIndexBufferHub/UpdateRequest.hpp
-	UniformInstanceIndexBufferHub/UniformInstanceIndexAllocator.hpp
-	UniformInstanceIndexBufferHub/IndexPool.hpp
-	UniformInstanceIndexBufferHub/UniformInstanceIndexBufferHub.hpp
+	Scene/UniformInstanceIndexBufferHub/RemoveRequest.hpp
+	Scene/UniformInstanceIndexBufferHub/AcquireRequest.hpp
+	Scene/UniformInstanceIndexBufferHub/UpdateRequest.hpp
+	Scene/UniformInstanceIndexBufferHub/UniformInstanceIndexAllocator.hpp
+	Scene/UniformInstanceIndexBufferHub/IndexPool.hpp
+	Scene/UniformInstanceIndexBufferHub/UniformInstanceIndexBufferHub.hpp
+
+	hrs/math/math_common.hpp
+	hrs/math/vector_common.hpp
+	hrs/math/vector.hpp
+	hrs/math/vector_view.hpp
+	hrs/math/matrix_common.hpp
+	hrs/math/matrix.hpp
+	hrs/math/matrix_view.hpp
+	hrs/math/quaternion.hpp
 )
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG "../../out/debug/")

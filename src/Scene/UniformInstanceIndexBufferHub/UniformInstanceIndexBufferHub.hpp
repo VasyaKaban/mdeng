@@ -7,8 +7,8 @@
 #pragma once
 
 #include "UniformInstanceIndexAllocator.hpp"
-#include "../Allocator/Allocator.hpp"
-#include "../Allocator/ConditionalAllocate.hpp"
+#include "../../Allocator/Allocator.hpp"
+#include "../../Allocator/ConditionalAllocate.hpp"
 
 namespace FireLand
 {

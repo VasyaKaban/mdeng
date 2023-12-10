@@ -8,6 +8,7 @@
 
 #include "../Vulkan/VulkanInclude.hpp"
 #include "Region.hpp"
+#include "Data.hpp"
 
 namespace FireLand
 {
@@ -40,14 +41,14 @@ namespace FireLand
 		ImageRegions regions;///<transfer regions
 		vk::DeviceSize texel_size;///<image texel size
 		vk::ImageLayout layout;///<image layout
-		std::byte *data;///pointer to data
+		mutable Data data;///data
 
 		constexpr TransferImageRegions(vk::Image &_image,
 									   vk::ImageLayout _layout,
 									   vk::DeviceSize _texel_size,
 									   std::vector<vk::BufferImageCopy> &&_regions,
 									   std::vector<std::size_t> &&_regions_offsets,
-									   std::byte *_data) noexcept
+									   Data _data) noexcept
 		{
 			image = _image;
 			regions = RegionsOffsets(std::move(_regions), std::move(_regions_offsets));
@@ -61,7 +62,7 @@ namespace FireLand
 									   vk::DeviceSize _texel_size,
 									   const vk::BufferImageCopy &_region,
 									   std::size_t _region_offset,
-									   std::byte *_data) noexcept
+									   Data _data) noexcept
 		{
 			image = _image;
 			regions = RegionOffset(_region, _region_offset);
@@ -78,9 +79,8 @@ namespace FireLand
 			regions = std::move(regs.regions);
 			texel_size = regs.texel_size;
 			layout = regs.layout;
-			data = regs.data;
+			data = std::move(regs.data);
 			regs.image = nullptr;
-			regs.data = nullptr;
 		}
 
 		auto operator=(const TransferImageRegions &) -> TransferImageRegions & = default;
@@ -90,9 +90,9 @@ namespace FireLand
 			regions = std::move(regs.regions);
 			texel_size = regs.texel_size;
 			layout = regs.layout;
-			data = regs.data;
+			data = std::move(regs.data);
 			regs.image = nullptr;
-			regs.data = nullptr;
+
 			return *this;
 		}
 
@@ -133,7 +133,7 @@ namespace FireLand
 				if constexpr(std::same_as<BT, RegionOffset<vk::BufferImageCopy>>)
 				{
 					const RegionOffset<vk::BufferImageCopy> &reg = val;
-					memcpy(map_ptr + reg.region.bufferOffset, this->data + reg.offset, this->GetSize(0));
+					memcpy(map_ptr + reg.region.bufferOffset, this->data.ptr + reg.offset, this->GetSize(0));
 
 					command_buffer.copyBufferToImage(transfer_buffer,
 													 this->image,
@@ -145,7 +145,7 @@ namespace FireLand
 					const RegionsOffsets<vk::BufferImageCopy> &regs = val;
 					for(std::size_t i = 0; i < regs.regions.size(); i++)
 						memcpy(map_ptr + regs.regions[i].bufferOffset,
-							   this->data + regs.regions_offsets[i],
+							   this->data.ptr + regs.regions_offsets[i],
 							   this->GetSize(i));
 
 					command_buffer.copyBufferToImage(transfer_buffer,
@@ -154,6 +154,8 @@ namespace FireLand
 													 regs.regions);
 				}
 			}, regions);
+
+			data.Delete();
 		}
 	};
 };
