@@ -90,4 +90,32 @@ namespace hrs
 
 	template<HasFormatter ...Args>
 	assert_true_debug(bool, std::format_string<Args...>, Args &&...) -> assert_true_debug<Args...>;
+
+	template<std::ranges::input_range R>
+	bool is_iterator_part_of_range(const R &rng, std::ranges::iterator_t<R> iterator) noexcept
+	{
+		for(auto it = std::ranges::begin(rng); it != std::ranges::end(rng); it++)
+			if(it == iterator)
+				return true;
+
+		return false;
+	}
+
+	template<std::ranges::input_range R>
+	bool is_iterator_part_of_range_debug(const R &rng, std::ranges::iterator_t<R> iterator) noexcept
+	{
+	#ifndef NDEBUG
+		return is_iterator_part_of_range_debug(rng, iterator);
+	#endif
+
+		return true;
+	}
+
+	template<std::invocable<std::source_location> F>
+	void execute_on_debug(F &&func, const std::source_location &loc = std::source_location::current())
+	{
+	#ifndef NDEBUG
+		std::forward<F>(func)(loc);
+	#endif
+	}
 };

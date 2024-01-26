@@ -136,7 +136,7 @@ namespace hrs
 		 * @brief get_free_blocks
 		 * @return list of all free blocks of this allocator
 		 */
-		std::list<block<T>> get_free_blocks() const
+		const std::list<block<T>> & get_free_blocks() const
 		{
 			return free_blocks;
 		}
@@ -145,9 +145,9 @@ namespace hrs
 		 * @brief get_free_blocks_count
 		 * @return count of free blocks with size of 'block_size'
 		 */
-		T get_free_blocks_count() const noexcept
+		std::size_t get_free_blocks_count() const noexcept
 		{
-			T blocks_count = 0;
+			std::size_t blocks_count = 0;
 			for(auto &free_blk : free_blocks)
 				blocks_count += free_blk.size / block_size;
 

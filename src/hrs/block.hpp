@@ -72,5 +72,6 @@ namespace hrs
 		constexpr block(block &&) noexcept = default;
 		constexpr block & operator=(const block &) noexcept = default;
 		constexpr block & operator=(block &&) noexcept = default;
+		constexpr bool operator==(const block &) const noexcept = default;
 	};
 }

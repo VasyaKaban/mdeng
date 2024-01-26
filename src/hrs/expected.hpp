@@ -26,8 +26,8 @@ namespace hrs
 	 * @param ptr pointer to data
 	 * @return ptr casted to E *
 	 *
-	 * Use std::start_lifetime_as if __cpp_lib_start_lifetime_as is supported.
-	 * Otherwise use reinterpret_cast.
+	 * Uses std::start_lifetime_as if __cpp_lib_start_lifetime_as is supported.
+	 * Otherwise uses reinterpret_cast.
 	 */
 	template<typename E>
 	constexpr E * convert_to_type_ptr(void *ptr)
@@ -111,6 +111,9 @@ namespace hrs
 	class expected
 	{
 	public:
+
+		using value_type = T;
+		using error_type = E;
 
 		constexpr inline static size_t data_size = common_size_align<T, E>().size;
 		constexpr inline static size_t data_alignment = common_size_align<T, E>().alignment;
