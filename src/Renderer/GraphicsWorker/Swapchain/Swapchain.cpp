@@ -1,24 +1,32 @@
 #include "Swapchain.h"
 #include "../../../Vulkan/VulkanUtils.hpp"
+#include "../../../hrs/scoped_call.hpp"
 
 namespace FireLand
 {
-	Swapchain::Swapchain(const Device *_parent_device,
-						 vk::SwapchainKHR _swapchain,
+	void Swapchain::init(vk::SwapchainKHR _swapchain,
 						 std::vector<vk::Image> &&_images,
 						 vk::SurfaceFormatKHR _format,
 						 vk::PresentModeKHR _present_mode,
 						 vk::Extent2D _extent,
 						 vk::Semaphore _acquire_signal_semaphore,
-						 vk::Semaphore _present_wait_semaphore) noexcept
-		: parent_device(_parent_device),
-		  swapchain(_swapchain),
-		  images(std::move(_images)),
-		  format(_format),
-		  present_mode(_present_mode),
-		  extent(_extent),
-		  acquire_signal_semaphore(_acquire_signal_semaphore),
-		  present_wait_semaphore(_present_wait_semaphore) {}
+						vk::Semaphore _present_wait_semaphore) noexcept
+	{
+		swapchain = _swapchain;
+		images = std::move(_images);
+		format = _format;
+		present_mode = _present_mode;
+		extent = _extent;
+		acquire_signal_semaphore = _acquire_signal_semaphore;
+		present_wait_semaphore = _present_wait_semaphore;
+	}
+
+	Swapchain::Swapchain(const Device *_parent_device) noexcept
+		: parent_device(_parent_device)
+	{
+		hrs::assert_true_debug(parent_device, "Parent device pointer points to null!");
+		hrs::assert_true_debug(parent_device->GetDevice(), "Parent device isn't createdd yet!");
+	}
 
 	Swapchain::~Swapchain()
 	{
@@ -60,67 +68,74 @@ namespace FireLand
 		return *this;
 	}
 
-	hrs::expected<Swapchain, vk::Result>
-	Swapchain::Create(const Device *_parent_device,
-					  const vk::SwapchainCreateInfoKHR &info)
+	vk::Result
+	Swapchain::Recreate(const vk::SwapchainCreateInfoKHR &info,
+						vk::Semaphore _acquire_signal_semaphore,
+						vk::Semaphore _present_wait_semaphore)
 	{
-		hrs::assert_true_debug(_parent_device, "Parent device points to null!");
-		hrs::assert_true_debug(_parent_device->GetDevice(), "Device isn't created yet!");
-
+		Destroy();
 		if(IsBadExtent(info.imageExtent))
-			return Swapchain(_parent_device,
-							 {},
-							 {},
-							 {info.imageFormat, info.imageColorSpace},
-							 info.presentMode,
-							 info.imageExtent,
-							 {},
-							 {});
+			return vk::Result::eSuccess;
 
+		vk::Device device_handle = parent_device->GetDevice();
+		constexpr static vk::SemaphoreCreateInfo sem_info;
+		hrs::scoped_call semaphores_dtor([&]()
+		{
+			device_handle.destroy(_acquire_signal_semaphore);
+			device_handle.destroy(_present_wait_semaphore);
+		});
 
-		vk::Device device_handle = _parent_device->GetDevice();
+		if(!_acquire_signal_semaphore)
+		{
+			auto [_acquire_sem_res, _acquire_sem] = device_handle.createSemaphore(sem_info);
+			if(_acquire_sem_res != vk::Result::eSuccess)
+				return _acquire_sem_res;
+
+			_acquire_signal_semaphore = _acquire_sem;
+		}
+
+		if(!_present_wait_semaphore)
+		{
+			auto [_present_sem_res, _present_sem] = device_handle.createSemaphore(sem_info);
+			if(_present_sem_res != vk::Result::eSuccess)
+				return _present_sem_res;
+
+			_present_wait_semaphore = _present_sem;
+		}
+
 		auto [u_swapchain_res, u_swapchain] = device_handle.createSwapchainKHRUnique(info);
 		if(u_swapchain_res != vk::Result::eSuccess)
 			return u_swapchain_res;
-
-		const static vk::SemaphoreCreateInfo sem_info;
-		auto [u_acquire_sem_res, u_acquire_sem] = device_handle.createSemaphoreUnique(sem_info);
-		if(u_acquire_sem_res != vk::Result::eSuccess)
-			return u_acquire_sem_res;
-
-		auto [u_present_sem_res, u_present_sem] = device_handle.createSemaphoreUnique(sem_info);
-		if(u_present_sem_res != vk::Result::eSuccess)
-			return u_present_sem_res;
 
 		auto [_images_res, _images] = device_handle.getSwapchainImagesKHR(u_swapchain.get());
 		if(_images_res != vk::Result::eSuccess)
 			return _images_res;
 
-		return Swapchain(_parent_device,
-						 u_swapchain.release(),
-						 std::move(_images),
-						 {info.imageFormat, info.imageColorSpace},
-						 info.presentMode,
-						 info.imageExtent,
-						 u_acquire_sem.release(),
-						 u_present_sem.release());
+		semaphores_dtor.Drop();
+
+		init(u_swapchain.release(),
+			 std::move(_images),
+			 {info.imageFormat, info.imageColorSpace},
+			 info.presentMode,
+			 info.imageExtent,
+			 _acquire_signal_semaphore,
+			 _present_wait_semaphore);
+
+		return vk::Result::eSuccess;
 	}
 
-	vk::SwapchainKHR Swapchain::RetireAndDestroy() noexcept
+	std::tuple<vk::SwapchainKHR, vk::Semaphore, vk::Semaphore> Swapchain::RetireAndDestroy() noexcept
 	{
-		const vk::SwapchainKHR out_swapchain = swapchain;
+		std::tuple out_tpl(swapchain, acquire_signal_semaphore, present_wait_semaphore);
 		if(IsCreated())
 		{
-			vk::Device device_handle = parent_device->GetDevice();
-			device_handle.destroy(acquire_signal_semaphore);
-			device_handle.destroy(present_wait_semaphore);
 			images.clear();
 			swapchain = VK_NULL_HANDLE;
 			acquire_signal_semaphore = VK_NULL_HANDLE;
 			present_wait_semaphore = VK_NULL_HANDLE;
 		}
 
-		return out_swapchain;
+		return out_tpl;
 	}
 
 	void Swapchain::Destroy() noexcept

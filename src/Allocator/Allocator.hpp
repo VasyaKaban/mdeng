@@ -108,7 +108,7 @@ namespace FireLand
 															   vk::DeviceSize requested_size,
 															   vk::DeviceSize previous_call_size) noexcept
 	{
-		constexpr vk::DeviceSize delim = 32;
+		/*constexpr vk::DeviceSize delim = 32;
 		if(previous_call_size == 0)//no previous call
 		{
 			vk::DeviceSize size_power = heap.size / delim;
@@ -121,7 +121,9 @@ namespace FireLand
 				return requested_size;
 
 			return new_size;
-		}
+		}*/
+
+		return requested_size;
 	}
 
 	inline Allocator::Allocator(vk::Device _device,
@@ -541,7 +543,7 @@ namespace FireLand
 										   previous_size, req.size);
 
 					auto bind_res = mem_type.BindToSeparatePool(device,
-																req.size,
+																req/*.size*/,
 																previous_size,
 																image,
 																resource_type,

@@ -17,14 +17,14 @@ namespace FireLand
 		UnexpectedAllocationResult & operator=(const UnexpectedAllocationResult &) = default;
 		UnexpectedAllocationResult & operator=(UnexpectedAllocationResult &&) = default;
 
-		virtual ~UnexpectedAllocationResult() = default;
+		virtual ~UnexpectedAllocationResult() override  = default;
 
-		virtual const std::source_location & GetSourceLocation() const noexcept
+		virtual const std::source_location & GetSourceLocation() const noexcept override
 		{
 			return location;
 		}
 
-		virtual std::string GetErrorMessage()
+		virtual std::string GetErrorMessage() const override
 		{
 			return AllocationResultToString(result);
 		}

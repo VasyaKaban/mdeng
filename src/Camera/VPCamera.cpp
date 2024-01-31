@@ -22,17 +22,17 @@ namespace FireLand
 		projection_values[3] = -(near * far) / (far - near);//z add
 	}
 
-	vk::Viewport VPCamera::GetViewport() noexcept
+	const vk::Viewport & VPCamera::GetViewport() const noexcept
 	{
 		return viewport;
 	}
 
-	vk::Rect2D VPCamera::GetScissorsRect() noexcept
+	const vk::Rect2D & VPCamera::GetScissorsRect() const noexcept
 	{
 		return scissors_rect;
 	}
 
-	hrs::math::glsl::std430::mat4x4 VPCamera::GetMatrix() noexcept
+	hrs::math::glsl::std430::mat4x4 VPCamera::GetComputedMatrix() const noexcept
 	{
 		auto projection_mat = hrs::math::glsl::std430::mat4x4::identity(1.0f);
 		projection_mat[0][0] = projection_values[0];

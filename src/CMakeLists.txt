@@ -19,12 +19,14 @@ set(Sources
 	hrs/error.hpp
 	hrs/instantiation.hpp
 	hrs/unexpected_result.hpp
+	#hrs/tuple_utils.hpp
 	#hrs/variadic.hpp
 	#hrs/function_traits.hpp
 	#hrs/callback.hpp
 	Vulkan/VulkanInclude.hpp
 	Vulkan/UnexpectedVkResult.hpp
 	Vulkan/VulkanUtils.hpp
+	Vulkan/VulkanFormatUtils.hpp
 
 	Allocator/Allocator.hpp
 	Allocator/MemoryType.hpp
@@ -54,14 +56,14 @@ set(Sources
 	#Scene/UniformInstanceIndexBufferHub/IndexPool.hpp
 	#Scene/UniformInstanceIndexBufferHub/UniformInstanceIndexBufferHub.hpp
 
-	#hrs/math/math_common.hpp
-	#hrs/math/vector_common.hpp
-	#hrs/math/vector.hpp
-	#hrs/math/vector_view.hpp
-	#hrs/math/matrix_common.hpp
-	#hrs/math/matrix.hpp
-	#hrs/math/matrix_view.hpp
-	#hrs/math/quaternion.hpp
+	hrs/math/math_common.hpp
+	hrs/math/vector_common.hpp
+	hrs/math/vector.hpp
+	hrs/math/vector_view.hpp
+	hrs/math/matrix_common.hpp
+	hrs/math/matrix.hpp
+	hrs/math/matrix_view.hpp
+	hrs/math/quaternion.hpp
 
 	Renderer/Context/Context.h
 	Renderer/Context/Context.cpp
@@ -72,7 +74,6 @@ set(Sources
 	Renderer/Context/Device.cpp
 	Renderer/Context/Surface.h
 	Renderer/Context/Surface.cpp
-	#Renderer/Context/Shader.h
 
 	Renderer/GraphicsWorker/GraphicsWorker.h
 	Renderer/GraphicsWorker/GraphicsWorker.cpp
@@ -83,20 +84,32 @@ set(Sources
 	Renderer/GraphicsWorker/Swapchain/Swapchain.cpp
 	Renderer/GraphicsWorker/RenderpassesOutputImage.h
 	Renderer/GraphicsWorker/RenderpassesOutputImage.cpp
-
+	Renderer/GraphicsWorker/FlaggedSwapchain.h
+	Renderer/GraphicsWorker/FlaggedSwapchain.cpp
 
 	Renderer/GraphicsWorker/RenderPass/DefferedPass/DefferedPass.h
 	Renderer/GraphicsWorker/RenderPass/DefferedPass/DefferedPass.cpp
 	Renderer/GraphicsWorker/RenderPass/DefferedPass/GBuffer.h
 	Renderer/GraphicsWorker/RenderPass/DefferedPass/GBuffer.cpp
-	Renderer/GraphicsWorker/RenderPass/DefferedPass/DefferedShader.h
-	Renderer/GraphicsWorker/RenderPass/DefferedPass/DefferedShader.cpp
+	Renderer/GraphicsWorker/RenderPass/DefferedPass/DefferedPassShader.h
 
-	#Scene/Scene.h
+	Renderer/GraphicsWorker/RenderPass/DefferedPass/Shaders/TestDefferedShader.h
+	Renderer/GraphicsWorker/RenderPass/DefferedPass/Shaders/TestDefferedShader.cpp
+	Renderer/GraphicsWorker/RenderPass/DefferedPass/Shaders/TestEvalShader.h
+	Renderer/GraphicsWorker/RenderPass/DefferedPass/Shaders/TestEvalShader.cpp
 
-	#Camera/Camera.h
-	#Camera/VPCamera.h
-	#Camera/VPCamera.cpp
+	Scene/Scene.h
+	Renderer/Shader/Shader.h
+	Renderer/Shader/ShaderInfoNode.hpp
+
+	Camera/Camera.h
+	Camera/ComputedCamera.h
+	Camera/ComputedCamera.cpp
+	Camera/VPCamera.h
+	Camera/VPCamera.cpp
+
+	TestScene/TestScene.h
+	TestScene/TestScene.cpp
 
 	#ImagesTaker/ImagesMemoryTaker.hpp
 	#ImagesTaker/ImagesMemoryTypeNode.hpp

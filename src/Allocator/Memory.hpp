@@ -32,8 +32,8 @@ namespace FireLand
 			: device_memory(mem.device_memory), size(mem.size), map_ptr(mem.map_ptr)
 		{
 			mem.device_memory = VK_NULL_HANDLE;
-			mem.size = 0;
-			mem.map_ptr = nullptr;
+			//mem.size = 0;
+			//mem.map_ptr = nullptr;
 		}
 
 		constexpr Memory & operator=(const Memory &) noexcept = default;
@@ -43,8 +43,8 @@ namespace FireLand
 			size = mem.size;
 			map_ptr = mem.map_ptr;
 			mem.device_memory = VK_NULL_HANDLE;
-			mem.size = 0;
-			mem.map_ptr = nullptr;
+			//mem.size = 0;
+			//mem.map_ptr = nullptr;
 			return *this;
 		}
 

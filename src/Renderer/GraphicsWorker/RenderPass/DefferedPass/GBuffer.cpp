@@ -1,73 +1,74 @@
 #include "GBuffer.h"
+#include "../../../../Vulkan/VulkanUtils.hpp"
 #include "../../../../hrs/debug.hpp"
 #include "../../../../hrs/scoped_call.hpp"
+#include "../../../../Vulkan/UnexpectedVkResult.hpp"
+#include "../../../../Allocator/UnexpectedAllocationResult.hpp"
 
 namespace FireLand
 {
-	GBuffer::GBuffer(Device *_parent_device,
-					 BuffersArray &&_buffers,
-					 vk::Extent2D _resolution) noexcept
-		: parent_device(_parent_device),
-		  buffers(std::move(_buffers)),
-		  resolution(_resolution) {}
+	void GBuffer::init(BuffersArray &&_buffers, const vk::Extent2D &_resolution) noexcept
+	{
+		buffers = std::move(_buffers);
+		resolution = _resolution;
+	}
 
-	hrs::expected<GBuffer, AllocationError> GBuffer::Create(Device *_parent_device,
-															const GBufferImageParams &color_buffer_params,
-															const GBufferImageParams &depth_buffer_params,
-															vk::Extent2D _resolution)
+	GBuffer::GBuffer(Device *_parent_device) noexcept
+		: parent_device(_parent_device)
 	{
 		hrs::assert_true_debug(_parent_device, "Parent device is points to null!");
 		hrs::assert_true_debug(_parent_device->GetDevice(), "Parent device isn't created yet!");
+	}
+
+	hrs::unexpected_result
+	GBuffer::Recreate(const GBufferImageParams &color_buffer_params,
+					  const GBufferImageParams &depth_buffer_params,
+					  const vk::Extent2D &_resolution)
+	{
+		if(IsBadExtent(_resolution))
+			return {};
 
 		static vk::ImageCreateInfo info({},
-										vk::ImageType::e2D,
+										IMAGE_TYPE,
 										{},
 										{},
 										1,
 										1,
-										vk::SampleCountFlagBits::e1,
-										vk::ImageTiling::eOptimal,
+										SAMPLES,
+										IMAGE_TILING,
 										{},
 										vk::SharingMode::eExclusive,
 										{},
 										{});
 
 		info.extent = vk::Extent3D(_resolution, 1);
-		Allocator *allocator = _parent_device->GetAllocator();
 
 		BuffersArray _buffers;
-		hrs::scoped_call buffers_dtor([&_buffers, _parent_device]()
+		hrs::scoped_call buffers_dtor([&_buffers, this]()
 		{
 			for(auto &buffer : _buffers)
-				_parent_device->GetAllocator()->Destroy(buffer.image, false);
+				parent_device->GetAllocator()->Destroy(buffer.image, false);
 		});
 
 
-		auto color_buffer_exp = allocate_image(allocator, color_buffer_params.FillInfo(info));
+		auto color_buffer_exp = allocate_image(color_buffer_params.FillInfo(info));
 		if(!color_buffer_exp)
-			return color_buffer_exp.error();
+			return std::move(color_buffer_exp.error());
 
-		_buffers[BufferIndices::ColorBuffer] = std::move(color_buffer_exp.value());
+		_buffers[BufferIndices::ColorBuffer].image = std::move(color_buffer_exp.value());
+		_buffers[BufferIndices::ColorBuffer].format = color_buffer_params.format;
 
-		auto depth_buffer_exp = allocate_image(allocator, depth_buffer_params.FillInfo(info));
+		auto depth_buffer_exp = allocate_image(depth_buffer_params.FillInfo(info));
 		if(!depth_buffer_exp)
-			return depth_buffer_exp.error();
+			return std::move(depth_buffer_exp.error());
 
-		_buffers[BufferIndices::DepthStencilBuffer] = std::move(color_buffer_exp.value());
+		_buffers[BufferIndices::DepthStencilBuffer].image = std::move(depth_buffer_exp.value());
+		_buffers[BufferIndices::DepthStencilBuffer].format = depth_buffer_params.format;
 
 		buffers_dtor.Drop();
 
-		return GBuffer(_parent_device,
-					   std::move(_buffers),
-					   _resolution);
-	}
-
-	GBuffer GBuffer::CreateNull(Device *_parent_device) noexcept
-	{
-		hrs::assert_true_debug(_parent_device, "Parent device is points to null!");
-		hrs::assert_true_debug(_parent_device->GetDevice(), "Parent device isn't created yet!");
-
-		return GBuffer(_parent_device, {}, {});
+		init(std::move(_buffers), _resolution);
+		return {};
 	}
 
 	GBuffer::~GBuffer()
@@ -123,8 +124,8 @@ namespace FireLand
 		return resolution;
 	}
 
-	hrs::expected<BoundedImage, AllocationError>
-	GBuffer::allocate_image(Allocator *allocator, const vk::ImageCreateInfo &info)
+	hrs::expected<BoundedImage, hrs::unexpected_result>
+	GBuffer::allocate_image(const vk::ImageCreateInfo &info)
 	{
 		constexpr static std::pair<vk::MemoryPropertyFlagBits, MemoryTypeSatisfyOperation> pairs[] =
 		{
@@ -133,21 +134,25 @@ namespace FireLand
 			{vk::MemoryPropertyFlagBits::eHostVisible, MemoryTypeSatisfyOperation::Any}
 		};
 
-		hrs::expected<BoundedImage, AllocationError> buffer_exp;
+		Allocator *allocator = parent_device->GetAllocator();
+
+		hrs::unexpected_result unexp_res;
 		for(const auto &pair : pairs)
 		{
-			buffer_exp = allocator->Create(info,
-										   pair.first,
-										   {},
-										   pair.second);
+			auto buffer_exp = allocator->Create(info,
+												pair.first,
+												{},
+												pair.second);
 
 			if(buffer_exp)
-				return buffer_exp;
+				return buffer_exp.value();
 			else if(buffer_exp.error().keeps<vk::Result>())
-				return buffer_exp;
+				return {UnexpectedVkResult(buffer_exp.error().get<vk::Result>())};
+			else
+				unexp_res = UnexpectedAllocationResult(buffer_exp.error().get<AllocationResult>());
 		}
 
-		return buffer_exp;
+		return unexp_res;
 	}
 };
 

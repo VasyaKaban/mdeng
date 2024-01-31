@@ -17,14 +17,14 @@ namespace FireLand
 		UnexpectedVkResult & operator=(const UnexpectedVkResult &) = default;
 		UnexpectedVkResult & operator=(UnexpectedVkResult &&) = default;
 
-		virtual ~UnexpectedVkResult() = default;
+		virtual ~UnexpectedVkResult() override = default;
 
-		virtual const std::source_location & GetSourceLocation() const noexcept
+		virtual const std::source_location & GetSourceLocation() const noexcept override
 		{
 			return location;
 		}
 
-		virtual std::string GetErrorMessage()
+		virtual std::string GetErrorMessage() const override
 		{
 			return vk::to_string(result);
 		}

@@ -23,8 +23,8 @@ namespace FireLand
 
 		void SetProjection(float fov, float aspect, float near, float far) noexcept;
 
-		virtual vk::Viewport GetViewport() noexcept override;
-		virtual vk::Rect2D GetScissorsRect() noexcept override;
-		virtual hrs::math::glsl::std430::mat4x4 GetMatrix() noexcept override;
+		virtual const vk::Viewport & GetViewport() const noexcept override;
+		virtual const vk::Rect2D & GetScissorsRect() const noexcept override;
+		virtual hrs::math::glsl::std430::mat4x4 GetComputedMatrix() const noexcept override;
 	};
 };

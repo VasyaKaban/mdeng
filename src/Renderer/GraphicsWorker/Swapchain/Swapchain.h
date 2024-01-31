@@ -11,8 +11,7 @@ namespace FireLand
 {
 	class Swapchain : public hrs::non_copyable
 	{
-		Swapchain(const Device *_parent_device,
-				  vk::SwapchainKHR _swapchain,
+		void init(vk::SwapchainKHR _swapchain,
 				  std::vector<vk::Image> &&_images,
 				  vk::SurfaceFormatKHR _format,
 				  vk::PresentModeKHR _present_mode,
@@ -21,14 +20,16 @@ namespace FireLand
 				  vk::Semaphore _present_wait_semaphore) noexcept;
 	public:
 
+		Swapchain(const Device *_parent_device) noexcept;
 		~Swapchain();
 		Swapchain(Swapchain &&schain) noexcept;
 		Swapchain & operator=(Swapchain &&schain) noexcept;
 
-		static hrs::expected<Swapchain, vk::Result> Create(const Device *_parent_device,
-														   const vk::SwapchainCreateInfoKHR &info);
+		vk::Result Recreate(const vk::SwapchainCreateInfoKHR &info,
+							vk::Semaphore _acquire_signal_semaphore = {},
+							vk::Semaphore _present_wait_semaphore = {});
 
-		vk::SwapchainKHR RetireAndDestroy() noexcept;
+		std::tuple<vk::SwapchainKHR, vk::Semaphore, vk::Semaphore> RetireAndDestroy() noexcept;
 		void Destroy() noexcept;
 
 		bool IsCreated() const noexcept;

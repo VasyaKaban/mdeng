@@ -4,6 +4,7 @@
 #include "../../../../hrs/non_creatable.hpp"
 #include "../../../../hrs/expected.hpp"
 #include "../../../../hrs/flags.hpp"
+#include "../../../../hrs/unexpected_result.hpp"
 
 namespace FireLand
 {
@@ -55,6 +56,10 @@ namespace FireLand
 
 	class GBuffer : public hrs::non_copyable
 	{
+		constexpr static vk::ImageType IMAGE_TYPE = vk::ImageType::e2D;
+		constexpr static vk::ImageTiling IMAGE_TILING = vk::ImageTiling::eOptimal;
+		constexpr static vk::SampleCountFlagBits SAMPLES = vk::SampleCountFlagBits::e1;
+
 	public:
 		enum BufferIndices
 		{
@@ -67,19 +72,15 @@ namespace FireLand
 
 	private:
 
-		GBuffer(Device *_parent_device,
-				BuffersArray &&_buffers,
-				vk::Extent2D _resolution) noexcept;
+		void init(BuffersArray &&_buffers, const vk::Extent2D &_resolution) noexcept;
 
 	public:
 
-		static hrs::expected<GBuffer, AllocationError> Create(Device *_parent_device,
-															  const GBufferImageParams &color_buffer_params,
-															  const GBufferImageParams &depth_buffer_params,
-															  vk::Extent2D _resolution);
+		GBuffer(Device *_parent_device) noexcept;
 
-		static GBuffer CreateNull(Device *_parent_device) noexcept;
-
+		hrs::unexpected_result Recreate(const GBufferImageParams &color_buffer_params,
+										const GBufferImageParams &depth_buffer_params,
+										const vk::Extent2D &_resolution);
 
 		~GBuffer();
 		GBuffer(GBuffer &&gbuf) noexcept;
@@ -96,8 +97,7 @@ namespace FireLand
 
 	private:
 
-		static hrs::expected<BoundedImage, AllocationError>
-		allocate_image(Allocator *allocator, const vk::ImageCreateInfo &info);
+		hrs::expected<BoundedImage, hrs::unexpected_result> allocate_image(const vk::ImageCreateInfo &info);
 
 		Device *parent_device;
 		BuffersArray buffers;

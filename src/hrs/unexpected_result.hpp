@@ -11,19 +11,23 @@ namespace hrs
 	public:
 		virtual ~unexpected_result_interface() {};
 		virtual const std::source_location & GetSourceLocation() const noexcept = 0;
-		virtual std::string GetErrorMessage() = 0;
+		virtual std::string GetErrorMessage() const = 0;
 	};
 
 	class unexpected_result : public hrs::non_copyable
 	{
 	public:
+
+		unexpected_result() = default;
+
 		template<std::derived_from<unexpected_result_interface> E>
 			requires
 				std::copy_constructible<std::remove_reference_t<E>> ||
 				std::move_constructible<std::remove_reference_t<E>>
 		unexpected_result(E &&error_object)
+			: error(new std::remove_cvref_t<E>(std::forward<E>(error_object)))
 		{
-			error(new std::remove_cvref_t<E>(std::forward<E>(error_object)));
+
 		}
 
 		~unexpected_result() = default;
@@ -41,8 +45,8 @@ namespace hrs
 		template<std::derived_from<unexpected_result_interface> E>
 		unexpected_result & operator=(E &&error_object)
 		{
-			error.reset();
-			error(new std::remove_cvref_t<E>(std::forward<E>(error_object)));
+			error.reset(new std::remove_cvref_t<E>(std::forward<E>(error_object)));
+			//error(new std::remove_cvref_t<E>(std::forward<E>(error_object)));
 			return *this;
 		}
 

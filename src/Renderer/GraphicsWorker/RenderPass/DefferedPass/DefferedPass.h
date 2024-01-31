@@ -2,7 +2,11 @@
 
 #include <map>
 #include "GBuffer.h"
-#include "DefferedShader.h"
+#include "../../../../hrs/unexpected_result.hpp"
+#include "../../../../Scene/Scene.h"
+#include "../../../../Camera/ComputedCamera.h"
+#include "DefferedPassShader.h"
+#include "../../../Shader/ShaderInfoNode.hpp"
 
 namespace FireLand
 {
@@ -19,88 +23,107 @@ namespace FireLand
 
 		enum SubpassIndices
 		{
-			RasterizationSubpass = 0,
-			EvaluationSubpass,
+			RasterizationSubpassIndex = 0,
+			EvaluationSubpassIndex,
 			LastUnusedSubpassIndex
 		};
 
 		using FramebufferImageViewsArray = std::array<vk::ImageView,
 													  AttachmentIndices::LastUnusedAttachmentIndex>;
 
-		using ShadersMap = std::multimap<std::uint32_t,
-										 std::unique_ptr<DefferedShader>,
-										 std::greater<std::uint32_t>>;
+		using ShaderSubpassBindingsArray =
+			std::array<std::vector<ShaderInfoNode<DefferedPassShader>>,
+					   SubpassIndices::LastUnusedSubpassIndex>;
 
-		using SubpassShaderBindingsArray = std::array<ShadersMap, SubpassIndices::LastUnusedSubpassIndex>;
+		using AttachmentFormatsArray = std::array<vk::Format, AttachmentIndices::LastUnusedAttachmentIndex>;
 
 	private:
 
-		DefferedPass(Device *_parent_device,
-					 vk::RenderPass _renderpass,
-					 vk::Framebuffer _framebuffer,
-					 FramebufferImageViewsArray &&_framebuffer_image_views,
-					 GBuffer &&_gbuffer) noexcept;
+		void init(GBuffer &&_gbuffer,
+				  vk::RenderPass _renderpass,
+				  vk::Framebuffer _framebuffer,
+				  FramebufferImageViewsArray &&_framebuffer_image_views,
+				  const AttachmentFormatsArray &_attachment_formats,
+				  vk::DescriptorPool _descriptor_pool,
+				  vk::DescriptorSetLayout _descriptor_set_layout,
+				  std::vector<vk::DescriptorSet> &&_descriptor_sets) noexcept;
 
 	public:
+
+		DefferedPass(Device *_parent_device) noexcept;
 
 		~DefferedPass();
 		DefferedPass(DefferedPass &&rpass) noexcept;
 		DefferedPass & operator=(DefferedPass &&rpass) noexcept;
 
-		static hrs::expected<DefferedPass, AllocationError>
-		Create(Device *_device,
-			   vk::Image light_pass_out_image,
-			   vk::Format light_pass_out_image_format,
-			   vk::Extent2D resolution);
-
 		void Destroy();
+		void DestroyWithoutShaders();
 
-		AllocationError Resize(vk::Extent2D resolution,
-							   vk::Image light_pass_out_image,
-							   vk::Format light_pass_out_image_format);
+		hrs::unexpected_result Resize(const vk::Extent2D &resolution,
+									  vk::Image evaluation_image,
+									  vk::Format evaluation_image_format,
+									  vk::DescriptorSetLayout globals_layout,
+									  std::uint32_t frame_count);
 
-		vk::Result Render(vk::CommandBuffer command_buffer);
+		void Render(vk::CommandBuffer command_buffer,
+					std::uint32_t frame_index,
+					vk::DescriptorSet globals_set,
+					const ComputedCamera &camera,
+					const Scene *scene);
 
 		bool IsCreated() const noexcept;
 
-		const SubpassShaderBindingsArray & GetSubpassShaderBindings() const noexcept;
+		const AttachmentFormatsArray & GetAttachmentFormats() const noexcept;
 
-		void AddShader(SubpassIndices subpass_index,
-					   DefferedShader *shader,
-					   std::uint32_t priority = 0);
+		hrs::unexpected_result AddShader(SubpassIndices subpass_index,
+										 DefferedPassShader *shader,
+										 const std::map<vk::ShaderStageFlagBits, ShaderInfo> shader_infos);
 
-		void DropShaders(SubpassIndices subpass_index,
-						 ShadersMap::const_iterator start,
-						 ShadersMap::const_iterator end);
+		const GBuffer &GetGBuffer() const noexcept
+		{
+			return gbuffer;
+		}
 
 	private:
 
-		static hrs::expected<GBuffer, AllocationError> create_gbuffer(Device *device,
-																	  vk::Extent2D resolution);
+		hrs::expected<GBuffer, hrs::unexpected_result> create_gbuffer(const vk::Extent2D &resolution);
 
-		static vk::ResultValue<vk::UniqueRenderPass>
-		create_renderpass(Device *device,
-						  const GBuffer &_gbuffer,
-						  vk::Format light_pass_out_image_format) noexcept;
+		vk::ResultValue<vk::UniqueRenderPass>
+		create_renderpass(const GBuffer &_gbuffer, vk::Format evaluation_image_format) noexcept;
 
-		static hrs::expected<FramebufferImageViewsArray, vk::Result>
-		create_framebuffer_image_views(Device *device,
-									   const GBuffer &_gbuffer,
-									   vk::Image light_pass_out_image,
-									   vk::Format light_pass_out_image_format);
+		hrs::expected<FramebufferImageViewsArray, vk::Result>
+		create_framebuffer_image_views(const GBuffer &_gbuffer,
+									   vk::Image evaluation_image,
+									   vk::Format evaluation_image_format);
 
-		static vk::ResultValue<vk::UniqueFramebuffer>
-		create_framebuffer(Device *device,
-						   vk::RenderPass rpass,
+		vk::ResultValue<vk::UniqueFramebuffer>
+		create_framebuffer(vk::RenderPass rpass,
 						   const FramebufferImageViewsArray &image_views,
-						   vk::Extent2D resolution) noexcept;
+						   const vk::Extent2D &resolution) noexcept;
 
+		AttachmentFormatsArray create_attachment_formats(const GBuffer &_gbuffer,
+														 vk::Format evaluation_image_format);
+
+		using create_descriptor_sets_result_t = hrs::expected<std::tuple<vk::UniqueDescriptorPool,
+																		 vk::UniqueDescriptorSetLayout,
+																		 std::vector<vk::DescriptorSet>>,
+															  vk::Result>;
+
+
+		create_descriptor_sets_result_t create_descriptor_sets(const FramebufferImageViewsArray &views,
+															   std::uint32_t frame_count);
 
 		Device *parent_device;
 		vk::RenderPass renderpass;
 		vk::Framebuffer framebuffer;
 		FramebufferImageViewsArray framebuffer_image_views;
 		GBuffer gbuffer;
-		SubpassShaderBindingsArray subpass_shader_bindings;
+		AttachmentFormatsArray attachment_formats;
+
+		vk::DescriptorPool descriptor_pool;
+		vk::DescriptorSetLayout descriptor_set_layout;
+		std::vector<vk::DescriptorSet> descriptor_sets;
+
+		ShaderSubpassBindingsArray shader_bindings;
 	};
 };

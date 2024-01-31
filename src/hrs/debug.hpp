@@ -23,8 +23,14 @@ namespace hrs
 	template<typename T>
 	concept HasFormatter = requires(T &&t)
 	{
+		requires (!std::is_enum_v<std::remove_reference_t<T>>);
 		{std::formatter<std::remove_reference_t<T>>{}};
+	} ||
+	requires(T &&t)
+	{
+		requires std::is_enum_v<std::remove_reference_t<T>>;
 	};
+
 
 	/**
 	 * @brief The assert_true class
@@ -48,11 +54,11 @@ namespace hrs
 		{
 			if(!condition)
 			{
-				std::cerr<<std::format("ASSERTION FAILED -> {}:{}:{}:{}\n",
+				std::cerr<<std::format("ASSERTION FAILED!\nFile: {}\nFunction: {}\nLine-column: {}:{}\n",
 										 loc.file_name(),
 										 loc.function_name(),
-										 loc.column(),
-										 loc.line());
+										 loc.line(),
+										 loc.column());
 				std::cerr<<"MESSAGE: "<<std::format(fmt, std::forward<Args>(args)...)<<"\n";
 				abort();
 			}
@@ -83,7 +89,16 @@ namespace hrs
 									const std::source_location &loc = std::source_location::current())
 		{
 		#ifndef NDEBUG
-			assert_true(condition, fmt, std::forward<Args>(args)...);
+			if(!condition)
+			{
+				std::cerr<<std::format("ASSERTION FAILED!\nFile: {}\nFunction: {}\nLine-column: {}:{}\n",
+										 loc.file_name(),
+										 loc.function_name(),
+										 loc.line(),
+										 loc.column());
+				std::cerr<<"MESSAGE: "<<std::format(fmt, std::forward<Args>(args)...)<<"\n";
+				abort();
+			}
 		#endif
 		}
 	};
@@ -105,7 +120,7 @@ namespace hrs
 	bool is_iterator_part_of_range_debug(const R &rng, std::ranges::iterator_t<R> iterator) noexcept
 	{
 	#ifndef NDEBUG
-		return is_iterator_part_of_range_debug(rng, iterator);
+		return is_iterator_part_of_range(rng, iterator);
 	#endif
 
 		return true;
