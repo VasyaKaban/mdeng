@@ -159,7 +159,7 @@ namespace hrs
 		 *
 		 * Sets nullopt to inner object to prevent functional object from being called
 		 */
-		constexpr void Drop() noexcept
+		constexpr void drop() noexcept
 		{
 			func = std::nullopt;
 		}
@@ -169,7 +169,7 @@ namespace hrs
 		 *
 		 * Explicitly calls inner functional object
 		 */
-		constexpr void Call() const noexcept(std::is_nothrow_invocable_v<F>)
+		constexpr void call() const noexcept(std::is_nothrow_invocable_v<F>)
 		{
 			if(func)
 				func();

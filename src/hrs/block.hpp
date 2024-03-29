@@ -7,7 +7,6 @@
 #pragma once
 
 #include <concepts>
-#include "debug.hpp"
 
 namespace hrs
 {
@@ -20,8 +19,8 @@ namespace hrs
 	template<std::unsigned_integral T>
 	constexpr bool is_power_of_two(T alignment) noexcept
 	{
-		assert_true_debug(alignment != 0, "Alignment must be > 0!");
-		return (alignment & (alignment - 1)) == 0;
+		//assert_true_debug(alignment != 0, "Alignment must be > 0!");
+		return (alignment && ((alignment & (alignment - 1)) == 0));
 	}
 
 	/**
@@ -32,7 +31,7 @@ namespace hrs
 	 * @return true if size is multiple of alignment, otherwise false
 	 */
 	template<std::unsigned_integral T>
-	constexpr bool is_multiple_of(T size, T alignment) noexcept
+	constexpr bool is_multiple_of(T size, std::type_identity_t<T> alignment) noexcept
 	{
 		return (size % alignment) == 0;
 	}
@@ -45,13 +44,13 @@ namespace hrs
 	 * @return size rounded up to alignment
 	 */
 	template<std::unsigned_integral T>
-	constexpr T round_up_size_to_alignment(T size, T alignment) noexcept
+	constexpr T round_up_size_to_alignment(T size, std::type_identity_t<T> alignment) noexcept
 	{
-		assert_true_debug(is_power_of_two(alignment), "Alignment isn't a power of 2!");
-		if(is_multiple_of(size, alignment))
-			return size;
+		//assert_true_debug(is_power_of_two(alignment), "Alignment isn't a power of 2!");
+		//if(is_multiple_of(size, alignment))
+		//	return size;
 
-		return (size < alignment ? alignment : (size / alignment) * alignment + alignment);
+		return (size <= alignment ? alignment : (size / alignment) * alignment + alignment);
 	}
 
 	/**
@@ -69,9 +68,7 @@ namespace hrs
 			: size(_size), offset(_offset) {}
 
 		constexpr block(const block &) noexcept = default;
-		constexpr block(block &&) noexcept = default;
 		constexpr block & operator=(const block &) noexcept = default;
-		constexpr block & operator=(block &&) noexcept = default;
 		constexpr bool operator==(const block &) const noexcept = default;
 	};
 }

@@ -1,28 +1,32 @@
 #include "Device.h"
+#include "PhysicalDevice.h"
 #include "../../hrs/iterator_for_each.hpp"
 
 namespace FireLand
 {
-	Device::Device(vk::Device &&_device,
-				   vk::PhysicalDevice &_physical_device,
-				   const vk::PhysicalDeviceFeatures &_features,
-				   std::unique_ptr<Allocator> _allocator)
+	Device::Device(vk::Device _device,
+				   const PhysicalDevice *_parent_physical_device,
+				   const vk::PhysicalDeviceFeatures &_enabled_features,
+				   std::unique_ptr<Allocator> _allocator) noexcept
 		: device(std::move(_device)),
-		  physical_device(_physical_device),
-		  features(_features),
-		  allocator(std::move(_allocator)){}
+		  parent_physical_device(_parent_physical_device),
+		  enabled_features(_enabled_features),
+		  allocator(std::move(_allocator)) {}
 
 	hrs::expected<Device, vk::Result>
-	Device::Create(vk::PhysicalDevice physical_device, const vk::DeviceCreateInfo &info) noexcept
+	Device::Create(const PhysicalDevice *_parent_physical_device, const vk::DeviceCreateInfo &info) noexcept
 	{
-		hrs::assert_true_debug(physical_device, "Physical device isn't create yet!");
+		hrs::assert_true_debug(_parent_physical_device, "Physical device pointer points to null!");
+		hrs::assert_true_debug(_parent_physical_device->GetHandle(), "Physical device isn't created yet!");
 
-		auto dev_opt = physical_device.createDevice(info);
-		if(dev_opt.result != vk::Result::eSuccess)
-			return dev_opt.result;
+		auto [_device_res, _device] = _parent_physical_device->GetHandle().createDevice(info);
+		if(_device_res != vk::Result::eSuccess)
+			return _device_res;
 
-		std::unique_ptr<Allocator> allocator(new Allocator(dev_opt.value, physical_device));
-		return Device(std::move(dev_opt.value), physical_device, *info.pEnabledFeatures, std::move(allocator));
+		std::unique_ptr<Allocator> allocator(new Allocator(_device,
+														   _parent_physical_device->GetHandle()));
+
+		return Device(_device, _parent_physical_device, *info.pEnabledFeatures, std::move(allocator));
 	}
 
 	Device::~Device()
@@ -31,25 +35,22 @@ namespace FireLand
 	}
 
 	Device::Device(Device &&dev) noexcept
-		: device(dev.device), physical_device(dev.physical_device),
-		  features(dev.features), workers(std::move(dev.workers)),
-		  allocator(std::move(dev.allocator))
-	{
-		dev.device = VK_NULL_HANDLE;
-		dev.physical_device = VK_NULL_HANDLE;
-	}
+		: device(std::exchange(dev.device, VK_NULL_HANDLE)),
+		  parent_physical_device(dev.parent_physical_device),
+		  enabled_features(dev.enabled_features),
+		  workers(std::move(dev.workers)),
+		  allocator(std::move(dev.allocator)) {}
 
 	Device & Device::operator=(Device &&dev) noexcept
 	{
 		Destroy();
 		device = dev.device;
-		physical_device = dev.physical_device;
-		features = dev.features;
+		device = std::exchange(dev.device, VK_NULL_HANDLE);
+		enabled_features = dev.enabled_features;
 		workers = std::move(dev.workers);
 		allocator = std::move(dev.allocator);
 
 		dev.device = VK_NULL_HANDLE;
-		dev.physical_device = VK_NULL_HANDLE;
 		return *this;
 	}
 
@@ -62,7 +63,6 @@ namespace FireLand
 			allocator.reset();
 			device.destroy();
 			device = VK_NULL_HANDLE;
-			physical_device = VK_NULL_HANDLE;
 		}
 	}
 
@@ -71,44 +71,49 @@ namespace FireLand
 		return device;
 	}
 
-	vk::Device Device::GetDevice() const noexcept
+	vk::Device Device::GetHandle() const noexcept
 	{
 		return device;
 	}
 
-	vk::PhysicalDevice Device::GetPhysicalDevice() const noexcept
+	const PhysicalDevice * Device::GetPhysicalDevice() const noexcept
 	{
-		return physical_device;
+		return parent_physical_device;
 	}
 
-	const std::list<std::unique_ptr<DeviceWorker>> & Device::GetWorkers() const noexcept
+	const Device::DeviceWorkersContainer & Device::GetDeviceWorkers() const noexcept
 	{
 		return workers;
 	}
 
-	DeviceWorker * Device::GetWorker(std::size_t index) noexcept
+	DeviceWorker * Device::GetDeviceWorker(std::size_t index) noexcept
 	{
 		return std::next(workers.begin(), index)->get();
 	}
 
-	const DeviceWorker * Device::GetWorker(std::size_t index) const noexcept
+	const DeviceWorker * Device::GetDeviceWorker(std::size_t index) const noexcept
 	{
 		return std::next(workers.begin(), index)->get();
 	}
 
-	void Device::DropDeviceWorker(const DeviceWorker *worker) noexcept
+	void Device::DropDeviceWorker(const DeviceWorker *worker)
 	{
 		hrs::iterator_for_each(workers, [&](std::list<std::unique_ptr<DeviceWorker>>::iterator iter) -> bool
 		{
 			if(iter->get() == worker)
 			{
-				//iter->reset();
 				workers.erase(iter);
 				return true;
 			}
 
 			return false;
 		});
+	}
+
+	void Device::DropDeviceWorker(DeviceWorkersContainer::const_iterator it)
+	{
+		hrs::assert_true_debug(hrs::is_iterator_part_of_range_debug(workers, it),
+							   "Device worker is not a part of this device!");
 	}
 
 	Allocator * Device::GetAllocator() noexcept
@@ -121,8 +126,8 @@ namespace FireLand
 		return allocator.get();
 	}
 
-	const vk::PhysicalDeviceFeatures & Device::GetFeatures() const noexcept
+	const vk::PhysicalDeviceFeatures & Device::GetEnabledFeatures() const noexcept
 	{
-		return features;
+		return enabled_features;
 	}
 }

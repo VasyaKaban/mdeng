@@ -4,22 +4,26 @@
 #include "../../hrs/expected.hpp"
 #include "../../hrs/non_creatable.hpp"
 #include "../../hrs/instantiation.hpp"
-#include "../../Allocator/Allocator.hpp"
+#include "../Allocator/Allocator.h"
 #include "DeviceWorker.h"
 #include <memory>
 #include <list>
 
 namespace FireLand
 {
+	class PhysicalDevice;
+
 	class Device : public hrs::non_copyable
 	{
-		Device(vk::Device &&_device,
-			   vk::PhysicalDevice &_physical_device,
-			   const vk::PhysicalDeviceFeatures &_features,
-			   std::unique_ptr<Allocator> _allocator);
+		Device(vk::Device _device,
+			   const PhysicalDevice *_parent_physical_device,
+			   const vk::PhysicalDeviceFeatures &_enabled_features,
+			   std::unique_ptr<Allocator> _allocator) noexcept;
 	public:
+		using DeviceWorkersContainer = std::list<std::unique_ptr<DeviceWorker>>;
+
 		static hrs::expected<Device, vk::Result>
-		Create(vk::PhysicalDevice physical_device, const vk::DeviceCreateInfo &info) noexcept;
+		Create(const PhysicalDevice *_parent_physical_device, const vk::DeviceCreateInfo &info) noexcept;
 
 		~Device();
 		Device(Device &&dev) noexcept;
@@ -29,19 +33,20 @@ namespace FireLand
 
 		bool IsCreated() const noexcept;
 
-		vk::Device GetDevice() const noexcept;
-		vk::PhysicalDevice GetPhysicalDevice() const noexcept;
+		vk::Device GetHandle() const noexcept;
+		const PhysicalDevice * GetPhysicalDevice() const noexcept;
 
-		const std::list<std::unique_ptr<DeviceWorker>> & GetWorkers() const noexcept;
-		DeviceWorker * GetWorker(std::size_t index) noexcept;
-		const DeviceWorker * GetWorker(std::size_t index) const noexcept;
+		const DeviceWorkersContainer & GetDeviceWorkers() const noexcept;
+		DeviceWorker * GetDeviceWorker(std::size_t index) noexcept;
+		const DeviceWorker * GetDeviceWorker(std::size_t index) const noexcept;
 
-		void DropDeviceWorker(const DeviceWorker *worker) noexcept;
+		void DropDeviceWorker(const DeviceWorker *worker);
+		void DropDeviceWorker(DeviceWorkersContainer::const_iterator it);
 
 		Allocator * GetAllocator() noexcept;
 		const Allocator * GetAllocator() const noexcept;
 
-		const vk::PhysicalDeviceFeatures & GetFeatures() const noexcept;
+		const vk::PhysicalDeviceFeatures & GetEnabledFeatures() const noexcept;
 
 		template<typename W, typename ...Args>
 			requires
@@ -50,8 +55,8 @@ namespace FireLand
 
 	private:
 		vk::Device device;
-		vk::PhysicalDevice physical_device;
-		vk::PhysicalDeviceFeatures features;
+		const PhysicalDevice *parent_physical_device;
+		vk::PhysicalDeviceFeatures enabled_features;
 		std::list<std::unique_ptr<DeviceWorker>> workers;
 		std::unique_ptr<Allocator> allocator;
 	};

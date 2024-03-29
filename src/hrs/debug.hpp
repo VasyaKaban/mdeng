@@ -107,9 +107,9 @@ namespace hrs
 	assert_true_debug(bool, std::format_string<Args...>, Args &&...) -> assert_true_debug<Args...>;
 
 	template<std::ranges::input_range R>
-	bool is_iterator_part_of_range(const R &rng, std::ranges::iterator_t<R> iterator) noexcept
+	bool is_iterator_part_of_range(const R &rng, decltype(std::ranges::cbegin(rng)) iterator) noexcept
 	{
-		for(auto it = std::ranges::begin(rng); it != std::ranges::end(rng); it++)
+		for(auto it = std::ranges::cbegin(rng); it != std::ranges::cend(rng); it++)
 			if(it == iterator)
 				return true;
 
@@ -117,7 +117,7 @@ namespace hrs
 	}
 
 	template<std::ranges::input_range R>
-	bool is_iterator_part_of_range_debug(const R &rng, std::ranges::iterator_t<R> iterator) noexcept
+	bool is_iterator_part_of_range_debug(const R &rng, decltype(std::ranges::cbegin(rng)) iterator) noexcept
 	{
 	#ifndef NDEBUG
 		return is_iterator_part_of_range(rng, iterator);

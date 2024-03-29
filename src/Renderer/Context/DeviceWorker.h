@@ -1,6 +1,5 @@
 #pragma once
 
-#include "../../Vulkan/VulkanInclude.hpp"
 #include "../../hrs/expected.hpp"
 #include "../../hrs/instantiation.hpp"
 

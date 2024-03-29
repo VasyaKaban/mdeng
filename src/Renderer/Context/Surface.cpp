@@ -1,31 +1,45 @@
 #include "Surface.h"
+#include "Context.h"
 #include "../../hrs/debug.hpp"
 #include <ranges>
 
 namespace FireLand
 {
-	Surface::Surface(vk::SurfaceKHR _surface) noexcept
-		: surface(_surface){}
+	Surface::Surface(const Context *_parent_context, vk::SurfaceKHR _surface) noexcept
+		: parent_context(_parent_context),
+		  surface(_surface) {}
 
 	Surface::Surface(Surface &&sur) noexcept
-		: surface(sur.surface)
+		: parent_context(sur.parent_context),
+		  surface(std::exchange(sur.surface, VK_NULL_HANDLE)) {}
+
+	Surface & Surface::operator=(Surface &&sur) noexcept
 	{
-		sur.surface = VK_NULL_HANDLE;
+		Destroy();
+
+		parent_context = std::exchange(sur.parent_context, VK_NULL_HANDLE);
+		surface = sur.surface;
+
+		return *this;
 	}
 
-	void Surface::Destroy(vk::Instance instance)
+	void Surface::Destroy()
 	{
 		if(IsCreated())
 		{
-			hrs::assert_true_debug(instance, "Instance isn't created yet!");
-			instance.destroy(surface);
+			parent_context->GetHandle().destroy(surface);
 			surface = VK_NULL_HANDLE;
 		}
 	}
 
-	vk::SurfaceKHR Surface::GetSurface() const noexcept
+	vk::SurfaceKHR Surface::GetHandle() const noexcept
 	{
 		return surface;
+	}
+
+	const Context * Surface::GetContext() const noexcept
+	{
+		return parent_context;
 	}
 
 	bool Surface::IsCreated() const noexcept
@@ -63,7 +77,7 @@ namespace FireLand
 	}
 
 	vk::Extent2D Surface::ClampExtent(const vk::SurfaceCapabilitiesKHR &caps,
-									  vk::Extent2D extent) const noexcept
+									  vk::Extent2D extent) noexcept
 	{
 		if(caps.currentExtent.width == caps.currentExtent.height && caps.currentExtent.width == 0xFFFFFFFF)
 			return caps.currentExtent;
@@ -73,7 +87,7 @@ namespace FireLand
 	}
 
 	std::uint32_t Surface::ClampImageCount(const vk::SurfaceCapabilitiesKHR &caps,
-										   std::uint32_t image_count) const noexcept
+										   std::uint32_t image_count) noexcept
 	{
 		const std::uint32_t max_count = (caps.maxImageCount == 0 ?
 											 std::numeric_limits<std::uint32_t>::max() :
@@ -83,25 +97,25 @@ namespace FireLand
 	}
 
 	std::uint32_t Surface::ClampLayerCount(const vk::SurfaceCapabilitiesKHR &caps,
-										   std::uint32_t layer_count) const noexcept
+										   std::uint32_t layer_count) noexcept
 	{
 		return std::clamp(layer_count, (std::uint32_t)1, caps.maxImageArrayLayers);
 	}
 
 	bool Surface::IsTransformSupported(const vk::SurfaceCapabilitiesKHR &caps,
-									   vk::SurfaceTransformFlagsKHR transform) const noexcept
+									   vk::SurfaceTransformFlagsKHR transform) noexcept
 	{
 		return static_cast<bool>(caps.supportedTransforms & transform);
 	}
 
 	bool Surface::IsCompositeAlphaSupported(const vk::SurfaceCapabilitiesKHR &caps,
-											vk::CompositeAlphaFlagBitsKHR alpha) const noexcept
+											vk::CompositeAlphaFlagBitsKHR alpha) noexcept
 	{
 		return static_cast<bool>(caps.supportedCompositeAlpha & alpha);
 	}
 
 	bool Surface::IsImageUsageSupported(const vk::SurfaceCapabilitiesKHR &caps,
-										vk::ImageUsageFlags usage) const noexcept
+										vk::ImageUsageFlags usage) noexcept
 	{
 		return static_cast<bool>(caps.supportedUsageFlags & usage);
 	}

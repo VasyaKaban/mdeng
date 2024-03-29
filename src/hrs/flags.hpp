@@ -248,4 +248,25 @@ namespace hrs
 			return *this;
 		}
 	};
+
+	template<typename T>
+		requires std::is_enum_v<T>
+	constexpr flags<T> operator|(T enum_value0, T enum_value1) noexcept
+	{
+		return flags<T>(enum_value0) | enum_value1;
+	}
+
+	template<typename T>
+		requires std::is_enum_v<T>
+	constexpr flags<T> operator&(T enum_value0, T enum_value1) noexcept
+	{
+		return flags<T>(enum_value0) & enum_value1;
+	}
+
+	template<typename T>
+		requires std::is_enum_v<T>
+	constexpr flags<T> operator^(T enum_value0, T enum_value1) noexcept
+	{
+		return flags<T>(enum_value0) ^ enum_value1;
+	}
 };

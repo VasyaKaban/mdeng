@@ -1,80 +1,22 @@
-/**
- * @file
- *
- * Represents expected and unexpected types
- */
-
 #pragma once
 
-#include <utility>
-#include <algorithm>
-#include <cstdint>
-#include <cstdlib>
-#include <type_traits>
-#include <cstring>
-#include <version>
-
-#ifdef __cpp_lib_start_lifetime_as
-#include <memory>
-#endif
+#include "mem_req.hpp"
+#include "instantiation.hpp"
 
 namespace hrs
-{	
-	/**
-	 * @brief convert_to_type_ptr
-	 * @tparam E type to cast
-	 * @param ptr pointer to data
-	 * @return ptr casted to E *
-	 *
-	 * Uses std::start_lifetime_as if __cpp_lib_start_lifetime_as is supported.
-	 * Otherwise uses reinterpret_cast.
-	 */
-	template<typename E>
-	constexpr E * convert_to_type_ptr(void *ptr)
+{
+	template<typename U>
+	constexpr U * start_lifetime_from_bytes(std::byte *ptr) noexcept
 	{
-	#ifdef __cpp_lib_start_lifetime_as
-		return std::start_lifetime_as<E>(ptr);
-	#else
-		return reinterpret_cast<E *>(ptr);
-	#endif
+		return std::launder(reinterpret_cast<U *>(ptr));
 	}
 
-	/**
-	 * @brief The union_size_alignment class
-	 */
-	struct union_size_alignment
+	template<typename U>
+	constexpr const U * start_lifetime_from_bytes(const std::byte *ptr) noexcept
 	{
-		size_t size;///<the size of union block
-		size_t alignment;///<the alignment of union block
-	};
-
-	/**
-	 * @brief common_size_align
-	 * @tparam T the first type
-	 * @tparam Args other types
-	 * @return the union_size_alignment object that containts common size and max alignment for passed types
-	 */
-	template<typename T, typename ...Args>
-	consteval union_size_alignment common_size_align()
-	{
-		size_t max_size = std::max({sizeof(T), sizeof(Args)...});
-		size_t max_align = std::max({alignof(T), alignof(Args)...});
-
-		if(max_size > max_align)
-		{
-			if(max_size % max_align != 0)
-				max_size = (max_size / max_align + 1) * max_align;
-		}
-
-		return {max_size, max_align};
+		return std::launder(reinterpret_cast<const U *>(ptr));
 	}
 
-	/**
-	 * @brief The unexpected class
-	 * @tparam E error type
-	 *
-	 * Used for expected class when it contains same error and value types
-	 */
 	template<typename E>
 	struct unexpected
 	{
@@ -100,13 +42,6 @@ namespace hrs
 		}
 	};
 
-	/**
-	 * @brief The expected class
-	 * @tparam T value type
-	 * @tparam E error type
-	 *
-	 * At one moment can include only value or error
-	 */
 	template<typename T, typename E>
 	class expected
 	{
@@ -115,8 +50,8 @@ namespace hrs
 		using value_type = T;
 		using error_type = E;
 
-		constexpr inline static size_t data_size = common_size_align<T, E>().size;
-		constexpr inline static size_t data_alignment = common_size_align<T, E>().alignment;
+		constexpr inline static size_t DATA_SIZE = union_size_alignment<T, E>().size;
+		constexpr inline static size_t DATA_ALIGNMENT = union_size_alignment<T, E>().alignment;
 
 		constexpr expected() noexcept(std::is_nothrow_default_constructible_v<T>)
 			requires std::is_default_constructible_v<T>
@@ -125,32 +60,20 @@ namespace hrs
 			new(union_block) T{};
 		}
 
-		constexpr expected(const T &val) noexcept(std::is_nothrow_copy_constructible_v<T>)
-			requires std::is_copy_constructible_v<T>
+		template<typename U = T>
+			requires std::constructible_from<T, U>
+		constexpr expected(U &&val) noexcept(std::is_nothrow_constructible_v<T, U>)
 		{
 			is_error = false;
-			new(union_block) T{val};
+			new(union_block) T(std::forward<U>(val));
 		}
 
-		constexpr expected(T &&val) noexcept(std::is_nothrow_move_constructible_v<T>)
-			requires std::is_move_constructible_v<T>
-		{
-			is_error = false;
-			new(union_block) T{std::move(val)};
-		}
-
-		constexpr expected(const E &err) noexcept(std::is_nothrow_copy_constructible_v<T>)
-			requires (!std::is_same_v<T, E>) && std::is_copy_constructible_v<E>
+		template<typename U = E>
+			requires std::constructible_from<E, U> && (!std::constructible_from<T, U>)
+		constexpr expected(U &&err) noexcept(std::is_nothrow_constructible_v<E, U>)
 		{
 			is_error = true;
-			new(union_block) E{err};
-		}
-
-		constexpr expected(E &&err) noexcept(std::is_nothrow_move_constructible_v<T>)
-			requires (!std::is_same_v<T, E>) && std::is_move_constructible_v<E>
-		{
-			is_error = true;
-			new(union_block) E{std::move(err)};
+			new(union_block) E(std::forward<U>(err));
 		}
 
 		constexpr expected(const unexpected<E> &unex) noexcept(std::is_nothrow_copy_constructible_v<E>)
@@ -170,209 +93,154 @@ namespace hrs
 		constexpr ~expected()
 		{
 			if(is_error)
-				convert_to_type_ptr<E>(union_block)->~E();
+				start_lifetime_from_bytes<E>(union_block)->~E();
 			else
-				convert_to_type_ptr<T>(union_block)->~T();
+				start_lifetime_from_bytes<T>(union_block)->~T();
 		}
 
 		constexpr expected(const expected &ex) noexcept(std::is_nothrow_copy_constructible_v<T> &&
 														std::is_nothrow_copy_constructible_v<E>)
 		{
-			if(ex.is_error)
-				*this = ex.error();
-			else
-				*this = ex.value();
-
+			*this = (ex.is_error ? ex.error() : ex.value());
 			is_error = ex.is_error;
 		}
 
 		constexpr expected(expected &&ex) noexcept(std::is_nothrow_move_constructible_v<T> &&
 												   std::is_nothrow_move_constructible_v<E>)
 		{
-			if(ex.is_error)
-				*this = std::move(ex.error());
-			else
-				*this = std::move(ex.value());
+			*this = (ex.is_error ? std::move(ex.error()) : std::move(ex.value()));
+			ex = expected{};
+		}
+
+		constexpr expected & operator=(const expected &ex) noexcept(std::is_nothrow_copy_constructible_v<T> &&
+																	std::is_nothrow_copy_constructible_v<E>)
+		{
+			this->~expected();
+
+			*this = (ex.is_error ? ex.error() : ex.value());
 			is_error = ex.is_error;
-			ex.is_error = false;
-			ex = T{};
+
+			return *this;
 		}
 
 		constexpr expected & operator=(expected &&ex) noexcept(std::is_nothrow_move_constructible_v<T> &&
 															   std::is_nothrow_move_constructible_v<E>)
 		{
 			this->~expected();
-			if(ex.is_error)
-				*this = std::move(ex.error());
-			else
-				*this = std::move(ex.value());
-			is_error = ex.is_error;
-			ex.is_error = false;
-			ex = T{};
-			return *this;
-		}
 
-		constexpr expected & operator=(const expected &ex) noexcept(std::is_nothrow_copy_constructible_v<T> &&
-																	   std::is_nothrow_copy_constructible_v<E>)
-		{
-			this->~expected();
-			if(ex.is_error)
-				*this = ex.error();
-			else
-				*this = ex.value();
-
-			is_error = ex.is_error;
+			*this = (ex.is_error ? std::move(ex.error()) : std::move(ex.value()));
+			ex = expected{};
 
 			return *this;
 		}
 
-		constexpr expected & operator=(const T &value) noexcept(std::is_nothrow_copy_assignable_v<T>)
+		template<typename U = T>
+			requires std::constructible_from<T, U>
+		constexpr expected & operator=(U &&value) noexcept(std::is_nothrow_constructible_v<T, U>)
 		{
 			this->~expected();
 			is_error = false;
-			new(union_block) T{value};
+			new(union_block) T(std::forward<U>(value));
 			return *this;
 		}
 
-		constexpr expected & operator=(T &&value) noexcept(std::is_nothrow_move_assignable_v<T>)
-		{
-			this->~expected();
-			is_error = false;
-			new(union_block) T{std::move(value)};
-			return *this;
-		}
-
-		constexpr expected & operator=(const E &error) noexcept(std::is_nothrow_copy_assignable_v<E>)
-			requires (!std::same_as<T, E>)
+		template<typename U = E>
+			requires std::constructible_from<E, U> && (!std::constructible_from<T, U>)
+		constexpr expected & operator=(U &&error) noexcept(std::is_nothrow_constructible_v<E, U>)
 		{
 			this->~expected();
 			is_error = true;
-			new(union_block) E{error};
+			new(union_block) E(std::forward<U>(error));
 			return *this;
 		}
 
-		constexpr expected & operator=(E &&error) noexcept(std::is_nothrow_move_assignable_v<E>)
-			requires (!std::same_as<T, E>)
-		{
-			this->~expected();
-			is_error = true;
-			new(union_block) E{std::move(error)};
-			return *this;
-		}
-
-		/**
-		 * @brief operator bool
-		 *
-		 * returns true if contains value
-		 */
 		constexpr explicit operator bool() const noexcept
 		{
 			return !is_error;
 		}
 
-		/**
-		 * @brief error
-		 * @return reference to error
-		 *
-		 * Explicitly casts inner data to error type without checks
-		 */
-		constexpr E & error() noexcept
+		constexpr E & error() & noexcept
 		{
-			return *convert_to_type_ptr<E>(union_block);
+			return *start_lifetime_from_bytes<E>(union_block);
 		}
 
-		/**
-		 * @brief error
-		 * @return const reference to error
-		 *
-		 * Explicitly casts inner data to error type without checks
-		 */
-		constexpr const E & error() const noexcept
+		constexpr const E & error() const & noexcept
 		{
-			return *convert_to_type_ptr<E>(union_block);
+			return *start_lifetime_from_bytes<E>(union_block);
 		}
 
-		/**
-		 * @brief value
-		 * @return reference to value
-		 *
-		 * Explicitly casts inner data to value type without checks
-		 */
-		constexpr T & value() noexcept
+		constexpr E && error() && noexcept
 		{
-			return *convert_to_type_ptr<T>(union_block);
+			return std::move(*start_lifetime_from_bytes<E>(union_block));
 		}
 
-		/**
-		 * @brief value
-		 * @return const reference to value
-		 *
-		 * Explicitly casts inner data to value type without checks
-		 */
-		constexpr const T & value() const noexcept
+		constexpr const E && error() const && noexcept
 		{
-			return *convert_to_type_ptr<T>(union_block);
+			return std::move(*start_lifetime_from_bytes<E>(union_block));
 		}
 
-		/**
-		 * @brief has_value
-		 * @return true if contains value, otherwise false
-		 *
-		 * Checks whether inner block contains value
-		 */
+		constexpr T & value() & noexcept
+		{
+			return *start_lifetime_from_bytes<T>(union_block);
+		}
+
+		constexpr const T & value() const & noexcept
+		{
+			return *start_lifetime_from_bytes<T>(union_block);
+		}
+
+		constexpr T && value() && noexcept
+		{
+			return std::move(*start_lifetime_from_bytes<T>(union_block));
+		}
+
+		constexpr const T && value() const && noexcept
+		{
+			return std::move(*start_lifetime_from_bytes<T>(union_block));
+		}
+
 		constexpr bool has_value() const noexcept
 		{
 			return !is_error;
 		}
 
-		/**
-		 * @brief operator ->
-		 * @return pointer to value type
-		 *
-		 * Explicitly casts inner data to pointer to value type
-		 */
 		constexpr T * operator->() noexcept
 		{
-			return convert_to_type_ptr<T>(union_block);
+			return start_lifetime_from_bytes<T>(union_block);
 		}
 
-		/**
-		 * @brief operator ->
-		 * @return pointer to value type
-		 *
-		 * Explicitly casts inner data to pointer to const value type
-		 */
 		constexpr const T * operator->() const noexcept
 		{
-			return convert_to_type_ptr<T>(union_block);
+			return start_lifetime_from_bytes<T>(union_block);
 		}
 
-		/**
-		 * @brief operator *
-		 * @return reference to value type
-		 *
-		 * Explicitly casts inner data to reference to value type
-		 */
-		constexpr T & operator*() noexcept
+		constexpr T & operator*() & noexcept
 		{
-			return *convert_to_type_ptr<T>(union_block);
+			return *start_lifetime_from_bytes<T>(union_block);
 		}
 
-		/**
-		 * @brief operator *
-		 * @return reference to value type
-		 *
-		 * Explicitly casts inner data to const reference to value type
-		 */
-		constexpr const T & operator*() const noexcept
+		constexpr const T & operator*() const & noexcept
 		{
-			return *convert_to_type_ptr<T>(union_block);
+			return *start_lifetime_from_bytes<T>(union_block);
+		}
+
+		constexpr T && operator*() && noexcept
+		{
+			return std::move(*start_lifetime_from_bytes<T>(union_block));
+		}
+
+		constexpr const T && operator*() const && noexcept
+		{
+			return std::move(*start_lifetime_from_bytes<T>(union_block));
 		}
 
 	private:
-		///a block of data that contains a value or error
-		alignas(data_alignment) uint8_t union_block[data_size];
-		///a flag that is used for checking whether a data block contains an error or value
+		alignas(DATA_ALIGNMENT) std::byte union_block[DATA_SIZE];
 		bool is_error;
 	};
 }
+
+
+
+
+

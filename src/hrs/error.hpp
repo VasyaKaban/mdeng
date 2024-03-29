@@ -1,87 +1,231 @@
 #pragma once
 
-#include <variant>
-#include "debug.hpp"
-#include "instantiation.hpp"
+#include <type_traits>
+#include <concepts>
+#include <cstdint>
+#include <string_view>
+
+#ifndef HRS_ERROR_NO_SOURCE_LOCATION
+#include <source_location>
+#endif
 
 namespace hrs
 {
-	template<typename T, typename ...Args>
-	concept is_one_of = (std::same_as<T, Args> || ...);
+	union enum_value
+	{
+		char c;
 
-	template<typename ...Args>
-		requires (std::is_enum_v<Args> && ...)
+		std::uint8_t u8t;
+		std::int8_t s8t;
+
+		std::uint16_t u16t;
+		std::int16_t s16t;
+
+		std::uint32_t u32t;
+		std::int32_t s32t;
+
+		std::uint64_t u64t;
+		std::int64_t s64t;
+
+		constexpr enum_value() noexcept : u8t(0) {}
+
+		constexpr enum_value(char _c) noexcept : c(_c) {}
+		constexpr enum_value(std::uint8_t _u8t) noexcept : u8t(_u8t) {}
+		constexpr enum_value(std::int8_t _s8t) noexcept : s8t(_s8t) {}
+		constexpr enum_value(std::uint16_t _u16t) noexcept : u16t(_u16t) {}
+		constexpr enum_value(std::int16_t _s16t) noexcept : s16t(_s16t) {}
+		constexpr enum_value(std::uint32_t _u32t) noexcept : u32t(_u32t) {}
+		constexpr enum_value(std::int32_t _s32t) noexcept : s32t(_s32t) {}
+		constexpr enum_value(std::uint64_t _u64t) noexcept : u64t(_u64t) {}
+		constexpr enum_value(std::int64_t _s64t) noexcept : s64t(_s64t) {}
+
+		template<std::integral I>
+		constexpr auto get_same() const noexcept
+		{
+			if constexpr(std::same_as<I, char>)
+				return c;
+			else if constexpr(std::same_as<I, std::uint8_t>)
+				return u8t;
+			else if constexpr(std::same_as<I, std::int8_t>)
+				return s8t;
+			else if constexpr(std::same_as<I, std::uint16_t>)
+				return u16t;
+			else if constexpr(std::same_as<I, std::int16_t>)
+				return s16t;
+			else if constexpr(std::same_as<I, std::uint32_t>)
+				return u32t;
+			else if constexpr(std::same_as<I, std::int32_t>)
+				return s32t;
+			else if constexpr(std::same_as<I, std::uint64_t>)
+				return u64t;
+			else if constexpr(std::same_as<I, std::int64_t>)
+				return s64t;
+		}
+
+		template<typename E>
+			requires std::is_enum_v<E>
+		constexpr auto get() const noexcept
+		{
+			return static_cast<E>(get_same<std::underlying_type_t<E>>());
+		}
+	};
+
+	template<typename E>
+		requires std::is_enum_v<E>
+	struct enum_error_traits
+	{
+		constexpr static void traits_hint() noexcept {};
+		constexpr static std::string_view get_name(E value) noexcept
+		{
+			return "";
+		}
+	};
+
 	class error
 	{
 	public:
-		constexpr error() = default;
+
+		using traits_hint_type = void (*)() noexcept;
+
+		constexpr error() noexcept
+			: traits_hint(nullptr) {}
+
 		~error() = default;
 
-		template<is_one_of<Args...> T>
-		constexpr error(T value) noexcept : var(value) {}
+#ifndef HRS_ERROR_NO_SOURCE_LOCATION
+		template<typename E>
+			requires std::is_enum_v<E>
+		constexpr error(E e, const std::source_location &_loc = std::source_location::current()) noexcept
+			: value(static_cast<std::underlying_type_t<E>>(e)),
+			  traits_hint(enum_error_traits<E>::traits_hint),
+			  source(_loc) {}
+#else
+		template<typename E>
+			requires std::is_enum_v<E>
+		constexpr error(E e) noexcept
+			: value(static_cast<std::underlying_type_t<E>>(e)),
+			  traits_hint(enum_error_traits<E>::traits_hint) {}
+#endif
 
-		template<typename ...AArgs>
-			requires (sizeof...(AArgs) <= sizeof...(Args)) && (is_one_of<AArgs, Args...> && ...)
-		constexpr error(const error<AArgs...> &err) noexcept
+		constexpr error(const error &) = default;
+		constexpr error & operator=(const error &) = default;
+
+		constexpr explicit operator bool() const noexcept
 		{
-			err.visit([this](const auto val)
-			{
-				var = val;
-			});
+			return traits_hint;
 		}
 
-		template<typename ...AArgs>
-			requires (sizeof...(AArgs) <= sizeof...(Args)) && (is_one_of<AArgs, Args...> && ...)
-		constexpr error & operator=(const error &err) noexcept
+		constexpr bool is_empty() const noexcept
 		{
-			err.visit([this](const auto val)
-			{
-				 var = val;
-			});
-
-			return *this;
+			return traits_hint == nullptr;
 		}
 
-		template<is_one_of<Args...> T>
-		constexpr bool keeps() const noexcept
+		constexpr void clear() noexcept
 		{
-			return std::visit([]<typename V>(const V val)
-			{
-				return std::same_as<T, V>;
-			}, var);
+			traits_hint = nullptr;
 		}
 
-		template<is_one_of<Args...> T>
-		constexpr T get() const noexcept
+		template<typename E>
+			requires std::is_enum_v<E>
+		constexpr bool holds() const noexcept
 		{
-			hrs::assert_true_debug(keeps<T>(), "Error doesn't keep the desired type now!");
-			return std::get<T>(var);
+			return traits_hint == enum_error_traits<E>::traits_hint;
 		}
 
-		template<typename F>
-			requires (std::invocable<F, Args> && ...)
-		constexpr auto visit(F &&f) const noexcept((std::is_nothrow_invocable_v<F, Args> && ...))
+		template<typename E>
+			requires std::is_enum_v<E>
+		constexpr E revive() const noexcept
 		{
-			return std::visit(std::forward<F>(f), var);
+			return (holds<E>() ? value.get<E>() : E{});
 		}
 
-		template<typename ...AArgs>
-			requires (sizeof...(AArgs) <= sizeof...(Args)) && (is_one_of<AArgs, Args...> && ...)
-		constexpr bool operator==(const error<AArgs...> &err) const noexcept
+		template<typename E>
+			requires std::is_enum_v<E>
+		constexpr std::string_view get_name() const noexcept
 		{
-			return err.visit([this]<typename T1>(const T1 val1)
-			{
-				return visit([val1]<typename T2>(const T2 val2)
-				{
-					if constexpr(std::same_as<T1, T2>)
-						return val1 == val2;
-					else
-						return false;
-				});
-			});
+			return (traits_hint == enum_error_traits<E>::traits_hint ?
+						enum_error_traits<E>::get_name(value.get<E>()) :
+						"");
+		}
+
+#ifndef HRS_ERROR_NO_SOURCE_LOCATION
+		constexpr const std::source_location & get_source_location() const noexcept
+		{
+			return source;
+		}
+#endif
+		constexpr enum_value get_raw_value() const noexcept
+		{
+			return value;
+		}
+
+		template<typename E>
+			requires std::is_enum_v<E>
+		constexpr bool operator==(E e) const noexcept
+		{
+			return (traits_hint == enum_error_traits<E>::traits_hint ? value.get<E>() == e : false);
 		}
 
 	private:
-		std::variant<Args...> var;
+
+		template<typename E, typename ...Enums, typename F>
+		constexpr bool visit_one(F &&f) const noexcept
+		{
+			if(enum_error_traits<E>::traits_hint == traits_hint)
+			{
+				if constexpr(std::invocable<F, E>)
+					std::forward<F>(f)(value.get<E>());
+
+				return true;
+			}
+
+			if constexpr(sizeof...(Enums) != 0)
+				return visit_one<Enums...>(std::forward<F>(f));
+			else
+				return false;
+		}
+
+	public:
+
+		template<typename ...Enums, typename F>
+			requires
+				(std::is_enum_v<Enums> && ...) &&
+				((std::invocable<F, Enums> && ...) ||
+				std::invocable<F, enum_value> ||
+				std::invocable<F>)
+		constexpr void visit(F &&f) const noexcept
+		{
+			//if traits_hint == nullptr -> F::operator(void) <-> finally()
+			//if traits_hint != Enums -> F::operator(enum_value) <-> catch(...)
+			//if traits_hint == Enums[traits_hint] -> F::operator(value.get<Enums>) <-> catch(Enums)
+			if(traits_hint == nullptr)
+			{
+				if constexpr(std::invocable<F>)
+					std::forward<F>(f)();
+			}
+			else
+			{
+				if constexpr(sizeof...(Enums) == 0)
+				{
+					if constexpr(std::invocable<F, enum_value>)
+						std::forward<F>(f)(value);
+				}
+				else
+				{
+					bool visit_res = visit_one<Enums...>(std::forward<F>(f));
+					if constexpr(std::invocable<F, enum_value>)
+					{
+						if(!visit_res)
+							std::forward<F>(f)(value);
+					}
+				}
+			}
+		}
+	private:
+		enum_value value;
+#ifndef HRS_ERROR_NO_SOURCE_LOCATION
+		std::source_location source;
+#endif
+		traits_hint_type traits_hint;
 	};
 };

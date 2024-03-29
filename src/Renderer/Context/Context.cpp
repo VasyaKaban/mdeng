@@ -3,8 +3,8 @@
 
 namespace FireLand
 {
-	Context::Context(vk::Instance &&_instance, std::vector<PhysicalDevice> &&_physical_devices) noexcept
-		: instance(std::move(_instance)), physical_devices(std::move(_physical_devices)) {}
+	Context::Context(vk::Instance _instance, PhysicalDevicesContainer &&_physical_devices) noexcept
+		: instance(_instance), physical_devices(std::move(_physical_devices)) {}
 
 	hrs::expected<std::uint32_t, vk::Result> Context::GetVersion() noexcept
 	{
@@ -48,9 +48,9 @@ namespace FireLand
 		std::vector<PhysicalDevice> physical_devices;
 		physical_devices.reserve(physical_devs.value.size());
 		for(auto &ph_dev : physical_devs.value)
-			physical_devices.push_back(ph_dev);
+			physical_devices.push_back(PhysicalDevice(this, ph_dev));
 
-		return Context(std::move(inst_opt.value.release()), std::move(physical_devices));
+		return Context(inst_opt.value.release(), std::move(physical_devices));
 	}
 
 	Context::~Context()
@@ -59,17 +59,18 @@ namespace FireLand
 	}
 
 	Context::Context(Context &&ctx) noexcept
-		: instance(std::move(ctx.instance)), physical_devices(std::move(ctx.physical_devices))
-	{
-		ctx.instance = VK_NULL_HANDLE;
-	}
+		: instance(std::exchange(ctx.instance, VK_NULL_HANDLE)),
+		  physical_devices(std::move(ctx.physical_devices)),
+		  surfaces(std::move(ctx.surfaces)),
+		  debug_messengers(ctx.debug_messengers) {}
 
 	Context & Context::operator=(Context &&ctx) noexcept
 	{
 		Destroy();
-		instance = std::move(ctx.instance);
+		instance = std::exchange(ctx.instance, VK_NULL_HANDLE);
 		physical_devices = std::move(ctx.physical_devices);
-		ctx.instance = VK_NULL_HANDLE;
+		surfaces = std::move(ctx.surfaces);
+		debug_messengers = std::move(ctx.debug_messengers);
 		return *this;
 	}
 
@@ -78,11 +79,14 @@ namespace FireLand
 		if(instance)
 		{
 			physical_devices.clear();
-			for(auto &surface : surfaces)
-				surface.Destroy(instance);
-
 			surfaces.clear();
+
+			for(auto &messenger : debug_messengers)
+				instance.destroy(messenger);
+
+			debug_messengers.clear();
 			instance.destroy();
+			instance = VK_NULL_HANDLE;
 		}
 	}
 
@@ -91,7 +95,7 @@ namespace FireLand
 		return instance;
 	}
 
-	const std::vector<PhysicalDevice> & Context::GetPhysicalDevices() const noexcept
+	const Context::PhysicalDevicesContainer & Context::GetPhysicalDevices() const noexcept
 	{
 		return physical_devices;
 	}
@@ -106,7 +110,7 @@ namespace FireLand
 		return physical_devices[index];
 	}
 
-	const std::list<Surface> & Context::GetSurfaces() const noexcept
+	const Context::SurfacesContainer & Context::GetSurfaces() const noexcept
 	{
 		return surfaces;
 	}
@@ -121,13 +125,20 @@ namespace FireLand
 		return *std::next(surfaces.begin(), index);
 	}
 
+	void Context::DropSurface(SurfacesContainer::const_iterator it) noexcept
+	{
+		hrs::assert_true_debug(hrs::is_iterator_part_of_range_debug(surfaces, it),
+							   "Surface is not a part of this context!");
+
+		surfaces.erase(it);
+	}
+
 	void Context::DropSurface(const Surface &surface) noexcept
 	{
-		hrs::iterator_for_each(surfaces, [&](std::list<Surface>::iterator iter) -> bool
+		hrs::iterator_for_each(surfaces, [&](SurfacesContainer::iterator iter) -> bool
 		{
-			if(iter->GetSurface() == surface.GetSurface())
+			if(iter->GetHandle() == surface.GetHandle())
 			{
-				iter->Destroy(instance);
 				surfaces.erase(iter);
 				return true;
 			}
@@ -136,8 +147,53 @@ namespace FireLand
 		});
 	}
 
-	vk::Instance Context::GetInstance() const noexcept
+	const Context::DebugMessengersContainer & Context::GetDebugMessengers() const noexcept
+	{
+		return debug_messengers;
+	}
+
+	vk::DebugUtilsMessengerEXT Context::GetDebugMessenger(std::size_t index) const noexcept
+	{
+		return *std::next(debug_messengers.begin(), index);
+	}
+
+	void Context::DropDebugMessenger(vk::DebugUtilsMessengerEXT messenger) noexcept
+	{
+		hrs::iterator_for_each(debug_messengers, [&](DebugMessengersContainer::iterator iter) -> bool
+		{
+			if(*iter == messenger)
+			{
+				instance.destroy(messenger);
+				debug_messengers.erase(iter);
+				return true;
+			}
+
+			return false;
+		});
+	}
+
+	void Context::DropDebugMessenger(DebugMessengersContainer::const_iterator it) noexcept
+	{
+		hrs::assert_true_debug(hrs::is_iterator_part_of_range_debug(debug_messengers, it),
+							   "Debug messenger is not a part of this context!");
+
+		instance.destroy(*it);
+		debug_messengers.erase(it);
+	}
+
+	vk::Instance Context::GetHandle() const noexcept
 	{
 		return instance;
+	}
+
+	hrs::expected<vk::DebugUtilsMessengerEXT, vk::Result>
+	Context::CreateDebugMessenger(const vk::DebugUtilsMessengerCreateInfoEXT &info) noexcept
+	{
+		auto [messenger_res, messenger] = instance.createDebugUtilsMessengerEXT(info);
+		if(messenger_res != vk::Result::eSuccess)
+			return messenger_res;
+
+		debug_messengers.push_back(messenger);
+		return *std::prev(debug_messengers.end());
 	}
 };
