@@ -3,4 +3,4 @@ out/*
 src/CMakeLists.txt.user
 src/main.cpp
 docs/*
-
+garbage/*

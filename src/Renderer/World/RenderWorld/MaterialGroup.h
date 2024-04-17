@@ -51,8 +51,10 @@ namespace FireLand
 											 std::uint32_t index);
 
 	private:
+		void destroy() noexcept;
+
 		friend class Shader;
-		const std::map<const Mesh *, RenderGroup> & shader_get_render_groups() const noexcept;
+		const RenderGroupsContainer& shader_get_render_groups() const noexcept;
 	private:
 		Shader *parent_shader;
 		const Material *material;

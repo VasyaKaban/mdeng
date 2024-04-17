@@ -13,7 +13,6 @@
 #include "RenderPass.h"
 #include "../../Allocator/MemoryType.h"
 #include "../../TransferChannel/Data.h"
-#include "../../Context/Device.h"
 
 namespace FireLand
 {
@@ -21,15 +20,45 @@ namespace FireLand
 	class Material;
 	class Shader;
 	class RenderPass;
+	class Device;
 
-	/*struct RenderGroupOptions
+	class RenderPassPayload : hrs::non_copyable
 	{
-		Shader *shader;
-		const Material *material;
-		const Mesh *mesh;
-		std::uint32_t init_size_power;
-		std::uint32_t rounding_size;
-	};*/
+	public:
+		RenderPassPayload(vk::Device _device_handle,
+						  vk::CommandPool _command_pool,
+						  std::vector<vk::CommandBuffer> &&_command_buffers) noexcept
+			: device_handle(_device_handle),
+			  command_pool(_command_pool),
+			  command_buffers(std::move(_command_buffers)) {}
+
+		~RenderPassPayload()
+		{
+			if(*this)
+			{
+				device_handle.destroy(command_pool);
+				command_pool = VK_NULL_HANDLE;
+			}
+		}
+
+		RenderPassPayload(RenderPassPayload &&) = default;
+		RenderPassPayload & operator=(RenderPassPayload &&) = default;
+
+		std::pair<vk::CommandPool, std::vector<vk::CommandBuffer>> Release() noexcept
+		{
+			return {std::exchange(command_pool, VK_NULL_HANDLE), std::move(command_buffers)};
+		}
+
+		explicit operator bool() const noexcept
+		{
+			return device_handle && command_pool;
+		}
+
+	private:
+		vk::Device device_handle;
+		vk::CommandPool command_pool;
+		std::vector<vk::CommandBuffer> command_buffers;
+	};
 
 	class RenderWorld : public hrs::non_copyable
 	{
@@ -56,6 +85,12 @@ namespace FireLand
 		//void NotifyRemoveEmptyRenderGroup(RenderGroup *render_group);
 		//void NotifyRemoveRenderGroup(RenderGroup *render_group);
 
+		/*(MaterialGroup *_parent_material_group,
+		 const Mesh *_mesh,
+		 IndexPool &&_pool,
+		 bool _enabled);*/
+
+
 		vk::Result RebindMaterial(const Shader *shader, const Material *mtl);
 		vk::Result RebindMaterial(const MaterialGroup *mtl_group);
 
@@ -79,15 +114,21 @@ namespace FireLand
 		void NotifyRemoveRenderGroupInstance(const RenderGroup *render_group,
 											 std::uint32_t index);
 
+		RenderGroup * AddRenderGroup(const Shader *shader,
+									 const Material *mtl,
+									 const Mesh *mesh,
+									 std::uint32_t init_size_power,
+									 std::uint32_t rounding_size,
+									 bool _enabled);
+
 		hrs::error Flush(std::uint32_t frame_index);
 
 		hrs::expected<std::span<const vk::CommandBuffer>, vk::Result>
 		Render(std::uint32_t frame_index,
 			   vk::DescriptorSet globals_set) const noexcept;
 
-		template<typename F>
-		hrs::expected<RenderPass *, hrs::error>
-		AddRenderPass(F &&rpass_creator, std::size_t priority);
+		hrs::expected<RenderPassPayload, vk::Result> AcquireRenderPassPayload();
+		bool AddRenderPass(RenderPass *renderpass, std::size_t priority);
 
 		bool HasRenderPass(const RenderPass *renderpass) const noexcept;
 		void RemoveRenderPass(const RenderPass *rpass) noexcept;
@@ -96,6 +137,9 @@ namespace FireLand
 		Device * GetParentDevice() noexcept;
 		const Device * GetParentDevice() const noexcept;
 		std::uint32_t GetFrameCount() const noexcept;
+
+	private:
+		void destroy() noexcept;
 
 	private:
 		Device *parent_device;
@@ -107,42 +151,4 @@ namespace FireLand
 		RenderPassesSearchContainer renderpasses_search;
 		//renderpass -> shader -> material -> mesh -> render_group
 	};
-
-	template<typename F>
-	hrs::expected<RenderPass *, hrs::error>
-	RenderWorld::AddRenderPass(F &&rpass_creator, std::size_t priority)
-	{
-		vk::Device device_handle = parent_device->GetHandle();
-		const vk::CommandPoolCreateInfo pool_info({}, queue_family_index);
-		auto [u_pool_res, u_pool] = device_handle.createCommandPoolUnique(pool_info);
-		if(u_pool_res != vk::Result::eSuccess)
-			return u_pool_res;
-
-		const vk::CommandBufferAllocateInfo command_buffer_info(u_pool.get(),
-																vk::CommandBufferLevel::ePrimary,
-																frame_count);
-
-		auto [buffers_res, buffers] = device_handle.allocateCommandBuffers(command_buffer_info);
-		if(buffers_res != vk::Result::eSuccess)
-			return buffers_res;
-
-		auto res = std::forward<F>(rpass_creator)(u_pool.get(), std::move(buffers));
-		static_assert(hrs::instantiation<std::remove_cvref_t<decltype(res)>, hrs::expected>);
-		if(!res)
-		{
-			device_handle.destroy(u_pool.release());
-			return res.error();
-		}
-
-		auto it = renderpasses.insert({priority, res.value()});
-		renderpasses_search.insert({res.value(), it});
-
-		if(render_results.size() < frame_count)
-			render_results.resize(frame_count);
-
-		for(std::size_t i = 0; i < frame_count; i++)
-			render_results[i].resize(renderpasses.size());
-
-		return res.value();
-	}
 };

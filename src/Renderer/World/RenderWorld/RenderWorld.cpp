@@ -1,6 +1,7 @@
 #include "RenderWorld.h"
 #include "Shader.h"
 #include "MaterialGroup.h"
+#include "../../Context/Device.h"
 
 namespace FireLand
 {
@@ -15,16 +16,7 @@ namespace FireLand
 
 	RenderWorld::~RenderWorld()
 	{
-		/*Device *parent_device;
-		std::uint32_t frame_count;
-		std::uint32_t queue_family_index;
-		std::function<NewPoolSizeCalculator> calc;
-		render_results
-		RenderPassesContainer renderpasses;
-		RenderPassesSearchContainer renderpasses_search;*/
-
-		renderpasses_search.clear();
-		renderpasses.clear();
+		destroy();
 	}
 
 	RenderWorld::RenderWorld(RenderWorld &&rw) noexcept
@@ -38,7 +30,7 @@ namespace FireLand
 
 	RenderWorld & RenderWorld::operator=(RenderWorld &&rw) noexcept
 	{
-		this->~RenderWorld();
+		destroy();
 
 		parent_device = rw.parent_device;
 		frame_count = rw.frame_count;
@@ -140,6 +132,26 @@ namespace FireLand
 		it->second->second->NotifyRemoveRenderGroupInstance(render_group, index);
 	}
 
+	RenderGroup * RenderWorld::AddRenderGroup(const Shader *shader,
+											  const Material *mtl,
+											  const Mesh *mesh,
+											  std::uint32_t init_size_power,
+											  std::uint32_t rounding_size,
+											  bool _enabled)
+	{
+		auto renderpass = shader->GetParentRenderPass();
+		auto it = renderpasses_search.find(renderpass);
+		if(it == renderpasses_search.end())
+			return nullptr;
+
+		return it->second->second->AddRenderGroup(shader,
+												  mtl,
+												  mesh,
+												  init_size_power,
+												  rounding_size,
+												  _enabled);
+	}
+
 	hrs::error RenderWorld::Flush(std::uint32_t frame_index)
 	{
 		for(auto &renderpass : renderpasses)
@@ -172,6 +184,36 @@ namespace FireLand
 		}
 
 		return std::span{render_results[frame_index].data(), fillness};
+	}
+
+	hrs::expected<RenderPassPayload, vk::Result> RenderWorld::AcquireRenderPassPayload()
+	{
+		vk::Device device_handle = parent_device->GetHandle();
+		const vk::CommandPoolCreateInfo pool_info({}, queue_family_index);
+		auto [u_pool_res, u_pool] = device_handle.createCommandPoolUnique(pool_info);
+		if(u_pool_res != vk::Result::eSuccess)
+			return u_pool_res;
+
+		const vk::CommandBufferAllocateInfo command_buffer_info(u_pool.get(),
+																vk::CommandBufferLevel::ePrimary,
+																frame_count);
+
+		auto [buffers_res, buffers] = device_handle.allocateCommandBuffers(command_buffer_info);
+		if(buffers_res != vk::Result::eSuccess)
+			return buffers_res;
+
+		return RenderPassPayload(device_handle, u_pool.release(), std::move(buffers));
+	}
+
+	bool RenderWorld::AddRenderPass(RenderPass *renderpass, std::size_t priority)
+	{
+		auto it = renderpasses_search.find(renderpass);
+		if(it != renderpasses_search.end())
+			return false;
+
+		auto insert_it = renderpasses.insert({priority, std::unique_ptr<RenderPass>(renderpass)});
+		renderpasses_search.insert({renderpass, insert_it});
+		return true;
 	}
 
 	bool RenderWorld::HasRenderPass(const RenderPass *renderpass) const noexcept
@@ -208,5 +250,11 @@ namespace FireLand
 	std::uint32_t RenderWorld::GetFrameCount() const noexcept
 	{
 		return frame_count;
+	}
+
+	void RenderWorld::destroy() noexcept
+	{
+		renderpasses_search.clear();
+		renderpasses.clear();
 	}
 };

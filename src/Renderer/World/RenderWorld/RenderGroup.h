@@ -38,6 +38,8 @@ namespace FireLand
 		const Mesh * GetMesh() const noexcept;
 
 	private:
+		void destroy() noexcept;
+	private:
 		MaterialGroup *parent_material_group;
 		IndexPool pool;
 		const Mesh *mesh;

@@ -17,12 +17,7 @@ namespace FireLand
 
 	Shader::~Shader()
 	{
-		materials_search.clear();
-		material_group_binding.clear();
-		descriptor_storage.Destroy();
-		data_index_storage.Destroy();
-		data_buffer.Destroy();
-		parent_renderpass->shader_free_command_buffers(command_buffers);
+		destroy();
 	}
 
 	Shader::Shader(Shader &&s) noexcept
@@ -36,7 +31,7 @@ namespace FireLand
 
 	Shader & Shader::operator=(Shader &&s) noexcept
 	{
-		this->~Shader();
+		destroy();
 
 		parent_renderpass = s.parent_renderpass;
 		command_buffers = std::move(s.command_buffers);
@@ -233,6 +228,35 @@ namespace FireLand
 			return;
 
 		it->second.material_group_it->NotifyRemoveRenderGroupInstance(render_group, index);
+	}
+
+	RenderGroup * Shader::AddRenderGroup(const Material *mtl,
+										 const Mesh *mesh,
+										 std::uint32_t init_size_power,
+										 std::uint32_t rounding_size,
+										 bool _enabled)
+	{
+		auto it = materials_search.find(mtl);
+		if(it == materials_search.end())
+			return nullptr;
+
+		return &it->second.material_group_it->AddRenderGroup(mesh,
+															 init_size_power,
+															 rounding_size,
+															 _enabled);
+	}
+
+	void Shader::destroy() noexcept
+	{
+		if(!parent_renderpass)
+			return;
+
+		materials_search.clear();
+		material_group_binding.clear();
+		descriptor_storage.Destroy();
+		data_index_storage.Destroy();
+		data_buffer.Destroy();
+		parent_renderpass->shader_free_command_buffers(command_buffers);
 	}
 
 	hrs::expected<std::pair<Shader::MaterialSearch, bool>, vk::Result>

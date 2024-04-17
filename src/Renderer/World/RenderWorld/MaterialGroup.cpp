@@ -11,7 +11,7 @@ namespace FireLand
 
 	MaterialGroup::~MaterialGroup()
 	{
-		render_groups.clear();
+		destroy();
 	}
 
 	MaterialGroup::MaterialGroup(MaterialGroup &&mtl) noexcept
@@ -23,7 +23,7 @@ namespace FireLand
 
 	MaterialGroup & MaterialGroup::operator=(MaterialGroup &&mtl) noexcept
 	{
-		this->~MaterialGroup();
+		destroy();
 
 		PlainStateful::operator=(std::move(mtl));
 		parent_shader = mtl.parent_shader;
@@ -111,7 +111,13 @@ namespace FireLand
 		it->second->second.RemoveIndex(index);
 	}
 
-	const std::map<const Mesh *, RenderGroup> & MaterialGroup::shader_get_render_groups() const noexcept
+	void MaterialGroup::destroy() noexcept
+	{
+		render_groups.clear();
+		render_groups_search.clear();
+	}
+
+	const MaterialGroup::RenderGroupsContainer & MaterialGroup::shader_get_render_groups() const noexcept
 	{
 		return render_groups;
 	}

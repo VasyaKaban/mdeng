@@ -18,6 +18,7 @@ namespace FireLand
 	class RenderGroup;
 	class Material;
 	class MaterialGroup;
+	class Mesh;
 
 	class RenderPass
 		: public hrs::non_copyable,
@@ -66,9 +67,16 @@ namespace FireLand
 		void NotifyRemoveRenderGroupInstance(const RenderGroup *render_group,
 											 std::uint32_t index);
 
+		RenderGroup * AddRenderGroup(const Shader *shader,
+									 const Material *mtl,
+									 const Mesh *mesh,
+									 std::uint32_t init_size_power,
+									 std::uint32_t rounding_size,
+									 bool _enabled);
+
 		virtual vk::Extent2D GetResolution() const noexcept = 0;
 		virtual std::uint32_t GetSubpassCount() const noexcept = 0;
-		virtual vk::CommandBufferInheritanceInfo GetInheritcanceInfo() const noexcept = 0;
+		virtual vk::CommandBufferInheritanceInfo GetInheritanceInfo() const noexcept = 0;
 		virtual vk::DescriptorSet GetDescriptorSet(std::uint32_t frame_index) const noexcept = 0;
 
 		using SubpassShaderBinding = std::multimap<std::size_t, std::unique_ptr<Shader>>;
@@ -94,6 +102,8 @@ namespace FireLand
 		allocate_secondary_command_buffers() noexcept;
 
 	private:
+		void destroy() noexcept;
+
 		friend class Shader;
 		void shader_free_command_buffers(std::span<const vk::CommandBuffer> shader_buffers) noexcept;
 	private:

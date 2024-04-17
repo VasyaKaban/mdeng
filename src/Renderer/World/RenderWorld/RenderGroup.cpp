@@ -15,7 +15,7 @@ namespace FireLand
 
 	RenderGroup::~RenderGroup()
 	{
-		pool.GetParentStorage()->RemovePool(&pool);
+		destroy();
 	}
 
 	RenderGroup::RenderGroup(RenderGroup &&rg) noexcept
@@ -26,6 +26,8 @@ namespace FireLand
 
 	RenderGroup & RenderGroup::operator=(RenderGroup &&rg) noexcept
 	{
+		destroy();
+
 		PlainStateful::operator=(std::move(rg));
 		parent_material_group = rg.parent_material_group;
 		pool = std::move(rg.pool);
@@ -94,5 +96,10 @@ namespace FireLand
 	const Mesh * RenderGroup::GetMesh() const noexcept
 	{
 		return mesh;
+	}
+
+	void RenderGroup::destroy() noexcept
+	{
+		pool.GetParentStorage()->RemovePool(&pool);
 	}
 };

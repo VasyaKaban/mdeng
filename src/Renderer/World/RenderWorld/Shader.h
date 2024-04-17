@@ -84,6 +84,12 @@ namespace FireLand
 		void NotifyRemoveRenderGroupInstance(const RenderGroup *render_group,
 											 std::uint32_t index);
 
+		RenderGroup * AddRenderGroup(const Material *mtl,
+									 const Mesh *mesh,
+									 std::uint32_t init_size_power,
+									 std::uint32_t rounding_size,
+									 bool _enabled);
+
 		virtual hrs::mem_req<vk::DeviceSize> GetDataMemoryRequirements() const noexcept = 0;
 
 	protected:
@@ -121,6 +127,9 @@ namespace FireLand
 		add_material(Material *material, bool _enabled);
 
 	private:
+		void destroy() noexcept;
+
+
 		MaterialGroup unlink_material_group(MaterialGroupsSearchContainer::iterator it) noexcept;
 
 		hrs::expected<MaterialGroupBindingsContainer::iterator, vk::Result>

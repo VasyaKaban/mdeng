@@ -15,13 +15,7 @@ namespace FireLand
 
 	RenderPass::~RenderPass()
 	{
-		if(!parent_world)
-			return;
-
-		vk::Device device_handle = parent_world->GetParentDevice()->GetHandle();
-		subpass_shaders.clear();
-		shaders_search.clear();
-		device_handle.destroy(command_pool);
+		destroy();
 	}
 
 	RenderPass::RenderPass(RenderPass &&rpg) noexcept
@@ -33,7 +27,7 @@ namespace FireLand
 
 	RenderPass & RenderPass::operator=(RenderPass &&rpg) noexcept
 	{
-		this->~RenderPass();
+		destroy();
 
 		parent_world = rpg.parent_world;
 		command_buffers = std::move(rpg.command_buffers);
@@ -84,7 +78,7 @@ namespace FireLand
 
 			for(const auto &shader : subpass_shaders[i])
 			{
-				const auto inheritance_info = GetInheritcanceInfo();
+				const auto inheritance_info = GetInheritanceInfo();
 				auto [shader_command_buffer, shader_res] = shader.second->Render(frame_index,
 																				 globals_set,
 																				 descriptor_set,
@@ -202,6 +196,35 @@ namespace FireLand
 			return;
 
 		it->second.it->second->NotifyRemoveRenderGroupInstance(render_group, index);
+	}
+
+	RenderGroup * RenderPass::AddRenderGroup(const Shader *shader,
+											 const Material *mtl,
+											 const Mesh *mesh,
+											 std::uint32_t init_size_power,
+											 std::uint32_t rounding_size,
+											 bool _enabled)
+	{
+		auto it = shaders_search.find(shader);
+		if(it == shaders_search.end())
+			return nullptr;
+
+		return it->second.it->second->AddRenderGroup(mtl,
+													 mesh,
+													 init_size_power,
+													 rounding_size,
+													 _enabled);
+	}
+
+	void RenderPass::destroy() noexcept
+	{
+		if(!parent_world)
+			return;
+
+		vk::Device device_handle = parent_world->GetParentDevice()->GetHandle();
+		subpass_shaders.clear();
+		shaders_search.clear();
+		device_handle.destroy(command_pool);
 	}
 
 	std::pair<RenderPass::SubpassShaderBinding::iterator, bool>

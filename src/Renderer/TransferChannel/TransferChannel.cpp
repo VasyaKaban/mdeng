@@ -11,6 +11,7 @@ namespace FireLand
 							   vk::CommandBuffer _command_buffer,
 							   const std::function<NewPoolSizeCalculator> &_calc,
 							   vk::DeviceSize _rounding_size,
+							   vk::DeviceSize _buffer_size_power,
 							   vk::DeviceSize _buffer_alignment) noexcept
 	{
 		buffers.push_back(std::move(buffer));
@@ -18,6 +19,7 @@ namespace FireLand
 		transfer_queue = _transfer_queue;
 		calc = _calc;
 		rounding_size = _rounding_size;
+		buffer_size_power = _buffer_size_power;
 		buffer_alignment = _buffer_alignment;
 		is_in_write = false;
 		command_buffer = _command_buffer;
@@ -39,6 +41,7 @@ namespace FireLand
 		  calc(tc.calc),
 		  rounding_size(tc.rounding_size),
 		  buffer_alignment(tc.buffer_alignment),
+		  buffer_size_power(tc.buffer_size_power),
 		  is_in_write(tc.is_in_write),
 		  command_buffer(tc.command_buffer) {}
 
@@ -53,6 +56,7 @@ namespace FireLand
 		calc = tc.calc;
 		rounding_size = tc.rounding_size;
 		buffer_alignment = tc.buffer_alignment;
+		buffer_size_power = tc.buffer_size_power;
 		is_in_write = tc.is_in_write;
 		command_buffer = tc.command_buffer;
 
@@ -62,7 +66,7 @@ namespace FireLand
 	hrs::error TransferChannel::Recreate(vk::Queue _transfer_queue,
 										 vk::CommandBuffer _command_buffer,
 										 vk::DeviceSize _rounding_size,
-										 std::size_t init_buffer_size_power,
+										 std::size_t _buffer_size_power,
 										 vk::DeviceSize _buffer_alignment,
 										 const std::function<NewPoolSizeCalculator> &_calc)
 	{
@@ -75,7 +79,7 @@ namespace FireLand
 		if(u_fence_res != vk::Result::eSuccess)
 			return u_fence_res;
 
-		if(init_buffer_size_power == 0)
+		if(_buffer_size_power == 0)
 		{
 			init({},
 				 u_fence.release(),
@@ -83,11 +87,12 @@ namespace FireLand
 				 _command_buffer,
 				 _calc,
 				 _rounding_size,
+				 _buffer_size_power,
 				 buffer_alignment);
 			return {};
 		}
 
-		auto buffer_exp = allocate_buffer({_rounding_size * init_buffer_size_power, _buffer_alignment}, _calc);
+		auto buffer_exp = allocate_buffer({_rounding_size * _buffer_size_power, _buffer_alignment}, _calc);
 		if(!buffer_exp)
 			return buffer_exp.error();
 
@@ -97,6 +102,7 @@ namespace FireLand
 			 _command_buffer,
 			 _calc,
 			 _rounding_size,
+			 _buffer_size_power,
 			 _buffer_alignment);
 
 		return {};
@@ -169,8 +175,7 @@ namespace FireLand
 	hrs::expected<std::size_t, hrs::error>
 	TransferChannel::CopyBuffer(vk::Buffer dst_buffer,
 								std::span<const Data> datas,
-								std::span<const TransferBufferOpRegion> regions,
-								std::size_t new_buffer_size_power)
+								std::span<const TransferBufferOpRegion> regions)
 	{
 		if(datas.empty() || regions.empty())
 			return 0;
@@ -196,7 +201,7 @@ namespace FireLand
 			}
 		}
 
-		auto unexp_res = push_new_buffer(common_size, new_buffer_size_power);
+		auto unexp_res = push_new_buffer(common_size);
 		if(unexp_res)
 			return unexp_res;
 
@@ -209,8 +214,7 @@ namespace FireLand
 										  vk::ImageLayout image_layout,
 										  vk::DeviceSize block_size,
 										  std::span<const Data> datas,
-										  std::span<const TransferImageOpRegion> regions,
-										  std::size_t new_buffer_size_power)
+										  std::span<const TransferImageOpRegion> regions)
 	{
 		if(datas.empty() || regions.empty() || block_size == 0)
 			return 0;
@@ -236,7 +240,7 @@ namespace FireLand
 			}
 		}
 
-		auto unexp_res = push_new_buffer(common_size, new_buffer_size_power);
+		auto unexp_res = push_new_buffer(common_size);
 		if(unexp_res)
 			return unexp_res;
 
@@ -528,14 +532,13 @@ namespace FireLand
 												   MemoryPoolOnEmptyPolicy::Free);
 	}
 
-	hrs::error TransferChannel::push_new_buffer(vk::DeviceSize common_size,
-												std::size_t new_buffer_size_power)
+	hrs::error TransferChannel::push_new_buffer(vk::DeviceSize common_size)
 	{
-		hrs::assert_true_debug(new_buffer_size_power != 0,
+		hrs::assert_true_debug(buffer_size_power != 0,
 							   "New buffer size power must be greater than zero!");
 
 		vk::DeviceSize rounded_common_size = hrs::round_up_size_to_alignment(common_size, rounding_size);
-		vk::DeviceSize new_buffer_size = new_buffer_size_power * rounding_size;
+		vk::DeviceSize new_buffer_size = buffer_size_power * rounding_size;
 		new_buffer_size = (new_buffer_size > rounded_common_size ? new_buffer_size : rounded_common_size);
 		auto buffer_exp = allocate_buffer({new_buffer_size, buffer_alignment}, calc);
 		if(!buffer_exp)

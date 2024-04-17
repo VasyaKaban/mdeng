@@ -37,7 +37,8 @@ namespace FireLand
 				  vk::CommandBuffer _command_buffer,
 				  const std::function<NewPoolSizeCalculator> &_calc,
 				  vk::DeviceSize _rounding_size,
-				  vk::DeviceSize _buffer_aligment) noexcept;
+				  vk::DeviceSize _buffer_size_power,
+				  vk::DeviceSize _buffer_alignment) noexcept;
 	public:
 		TransferChannel(Device *_parent_device) noexcept;
 		~TransferChannel();
@@ -47,7 +48,7 @@ namespace FireLand
 		hrs::error Recreate(vk::Queue _transfer_queue,
 							vk::CommandBuffer _command_buffer,
 							vk::DeviceSize _rounding_size,
-							std::size_t init_buffer_size_power,
+							std::size_t _buffer_size_power,
 							vk::DeviceSize _buffer_alignment,
 							const std::function<NewPoolSizeCalculator> &_calc);
 
@@ -66,8 +67,7 @@ namespace FireLand
 		hrs::expected<std::size_t, hrs::error>
 		CopyBuffer(vk::Buffer dst_buffer,
 				   std::span<const Data> datas,
-				   std::span<const TransferBufferOpRegion> regions,
-				   std::size_t new_buffer_size_power);
+				   std::span<const TransferBufferOpRegion> regions);
 
 		//do not care about minImageTransferGranularity because we want to transfer the whole mip level!
 		hrs::expected<std::size_t, hrs::error>
@@ -75,8 +75,7 @@ namespace FireLand
 							 vk::ImageLayout image_layout,
 							 vk::DeviceSize block_size,
 							 std::span<const Data> datas,
-							 std::span<const TransferImageOpRegion> regions,
-							 std::size_t new_buffer_size_power);
+							 std::span<const TransferImageOpRegion> regions);
 
 		vk::Result EmbedBarrier(vk::PipelineStageFlags src_stages,
 								vk::PipelineStageFlags dst_stages,
@@ -88,7 +87,7 @@ namespace FireLand
 
 		template<std::invocable<vk::CommandBuffer, vk::Buffer, vk::DeviceSize> F>
 		hrs::expected<std::size_t, hrs::error>
-		EmbedOperation(F &&func, vk::DeviceSize required_size, vk::DeviceSize new_buffer_size_power);
+		EmbedOperation(F &&func, vk::DeviceSize required_size);
 
 		template<std::invocable F>
 		void AddWaitFunction(F &&func);
@@ -133,7 +132,7 @@ namespace FireLand
 
 		void free_buffers() noexcept;
 
-		hrs::error push_new_buffer(vk::DeviceSize common_size, std::size_t new_buffer_size_power);
+		hrs::error push_new_buffer(vk::DeviceSize common_size);
 
 	private:
 		Device *parent_device;
@@ -144,6 +143,7 @@ namespace FireLand
 		std::function<NewPoolSizeCalculator> calc;
 		vk::DeviceSize rounding_size;
 		vk::DeviceSize buffer_alignment;
+		vk::DeviceSize buffer_size_power;
 		bool is_in_write;
 		vk::CommandBuffer command_buffer;
 	};
@@ -151,11 +151,10 @@ namespace FireLand
 	template<std::invocable<vk::CommandBuffer, vk::Buffer, vk::DeviceSize> F>
 	hrs::expected<std::size_t, hrs::error>
 	TransferChannel::EmbedOperation(F &&func,
-									vk::DeviceSize required_size,
-									vk::DeviceSize new_buffer_size_power)
+									vk::DeviceSize required_size)
 	{
 		constexpr auto call_func_and_fill =
-		[&func, required_size, new_buffer_size_power, this](BoundedBufferSizeFillness &buffer)
+		[&func, required_size, this](BoundedBufferSizeFillness &buffer)
 		{
 			std::forward<F>(func)(command_buffer,
 								  buffer.bounded_buffer_size.bounded_buffer.buffer,
@@ -186,7 +185,7 @@ namespace FireLand
 				}
 			}
 
-			auto unexp_res = push_new_buffer(required_size, new_buffer_size_power);
+			auto unexp_res = push_new_buffer(required_size);
 			if(unexp_res)
 				return unexp_res;
 
