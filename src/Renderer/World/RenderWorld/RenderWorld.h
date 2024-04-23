@@ -5,10 +5,10 @@
 #include <unordered_map>
 #include <memory>
 #include <functional>
-#include "../../../hrs/block.hpp"
-#include "../../../Vulkan/VulkanInclude.hpp"
-#include "../../../hrs/error.hpp"
-#include "../../../hrs/expected.hpp"
+#include "hrs/block.hpp"
+#include "../../Vulkan/VulkanInclude.hpp"
+#include "hrs/error.hpp"
+#include "hrs/expected.hpp"
 #include "RenderGroup.h"
 #include "RenderPass.h"
 #include "../../Allocator/MemoryType.h"

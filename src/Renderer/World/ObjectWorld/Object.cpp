@@ -48,9 +48,9 @@ namespace FireLand
 		object_instances.erase(oi);
 	}
 
-	bool Object::AddObjectInstance(ObjectInstance *oi)
+	bool Object::AddObjectInstance(std::unique_ptr<ObjectInstance> &&oi)
 	{
-		auto it = object_instances.insert({oi, std::unique_ptr<ObjectInstance>(oi)});
+		auto it = object_instances.insert({oi.get(), std::move(oi)});
 		return it.second;
 	}
 

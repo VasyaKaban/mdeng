@@ -2,8 +2,8 @@
 
 #include <format>
 #include "VulkanInclude.hpp"
-#include "../hrs/debug.hpp"
-#include "../hrs/instantiation.hpp"
+#include "hrs/debug.hpp"
+#include "hrs/instantiation.hpp"
 
 namespace FireLand
 {

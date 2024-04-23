@@ -3,9 +3,9 @@
 #include <unordered_map>
 #include <map>
 #include <filesystem>
-#include "../../hrs/non_creatable.hpp"
-#include "../../hrs/expected.hpp"
-#include "../../Vulkan/VulkanInclude.hpp"
+#include "hrs/non_creatable.hpp"
+#include "hrs/expected.hpp"
+#include "../Vulkan/VulkanInclude.hpp"
 #include "../Allocator/AllocateFromMany.hpp"
 
 namespace FireLand
@@ -67,15 +67,50 @@ namespace FireLand
 		}
 	};
 
+	struct ImageStoragePathComparator
+	{
+		using is_transparent = void;
+
+		std::size_t operator()(const std::filesystem::path &path, const char *str) const noexcept
+		{
+			return path < str;
+		}
+
+		std::size_t operator()(const char *str, const std::filesystem::path &path) const noexcept
+		{
+			return str < path;
+		}
+
+		std::size_t operator()(const std::filesystem::path &path, const std::string &str) const noexcept
+		{
+			return path < str;
+		}
+
+		std::size_t operator()(const std::string &str, const std::filesystem::path &path) const noexcept
+		{
+			return str < path;
+		}
+
+		std::size_t operator()(const std::filesystem::path &path, std::string_view str) const noexcept
+		{
+			return path < str;
+		}
+
+		std::size_t operator()(std::string_view str, const std::filesystem::path &path) const noexcept
+		{
+			return str < path;
+		}
+
+	};
+
 	class ImageStorage : public hrs::non_copyable
 	{
 	public:
 
-		using ImagesMap = std::map<std::filesystem::path, Image>;
+		using ImagesMap = std::map<std::filesystem::path, Image, ImageStoragePathComparator>;
 		using ImageGroups = std::unordered_map<ImageGroupKey,
 											   ImagesMap,
-											   ImageStorageStringHash,
-											   std::equal_to<>>;
+											   ImageStorageStringHash>;
 
 		ImageStorage(Device *_parent_device, std::initializer_list<ImageGroupKey> groups);
 		~ImageStorage();

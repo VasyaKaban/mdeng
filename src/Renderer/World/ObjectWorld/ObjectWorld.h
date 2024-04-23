@@ -3,9 +3,10 @@
 #include <string>
 #include <map>
 #include <memory>
-#include "../../../hrs/non_creatable.hpp"
+#include "hrs/non_creatable.hpp"
 #include "../../Allocator/MemoryType.h"
 #include "../../Allocator/BoundedResourceSize.hpp"
+#include "Object.h"
 
 namespace FireLand
 {
@@ -16,14 +17,24 @@ namespace FireLand
 	{
 		using is_transparent = void;
 
+		bool operator()(const std::string &str1, const std::string &str2) const noexcept
+		{
+			return str1 < str2;
+		}
+
 		bool operator()(const std::string &str, std::string_view str_view) const noexcept
 		{
 			return str < str_view;
 		}
 
-		bool operator()(const std::string &str, const char *str_lit) const noexcept
+		bool operator()(std::string_view str_view, const std::string &str) const noexcept
 		{
-			return str < str_lit;
+			return str_view < str;
+		}
+
+		bool operator()(std::string_view str_view1, std::string_view str_view2) const noexcept
+		{
+			return str_view1 < str_view2;
 		}
 	};
 
@@ -97,7 +108,7 @@ namespace FireLand
 							 vk::DeviceSize vertex_data_alignment);
 
 		//AcquireObjectPayload -> Create Object impl -> Call TransferMeshData -> Call AddObject
-		bool AddObject(std::string_view name, Object *object);
+		bool AddObject(std::string_view name, std::unique_ptr<Object> &&object);
 
 		bool HasObject(std::string_view name) const noexcept;
 		void RemoveObject(std::string_view name);

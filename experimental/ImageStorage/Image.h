@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../../hrs/expected.hpp"
-#include "../../hrs/non_creatable.hpp"
+#include "hrs/expected.hpp"
+#include "hrs/non_creatable.hpp"
 #include "../Allocator/BoundedResourceSize.hpp"
 #include "../Allocator/AllocateFromMany.hpp"
 #include <list>

@@ -1,6 +1,6 @@
 #include "IndexPool.h"
 #include "DataIndexStorage.h"
-#include "../../hrs/block.hpp"
+#include "hrs/block.hpp"
 
 namespace FireLand
 {

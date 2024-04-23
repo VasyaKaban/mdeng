@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../../Vulkan/VulkanInclude.hpp"
-#include "../../hrs/debug.hpp"
-#include "../../hrs/block.hpp"
+#include "../Vulkan/VulkanInclude.hpp"
+#include "hrs/debug.hpp"
+#include "hrs/block.hpp"
 #include "Data.h"
 
 namespace FireLand

@@ -1,7 +1,7 @@
 #include "PhysicalDevice.h"
 #include "Context.h"
-#include "../../hrs/debug.hpp"
-#include "../../hrs/iterator_for_each.hpp"
+#include "hrs/debug.hpp"
+#include "hrs/iterator_for_each.hpp"
 
 namespace FireLand
 {

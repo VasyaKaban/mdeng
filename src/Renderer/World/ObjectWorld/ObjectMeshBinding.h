@@ -2,7 +2,7 @@
 
 #include <cstdint>
 #include <unordered_map>
-#include "../../../hrs/non_creatable.hpp"
+#include "hrs/non_creatable.hpp"
 
 namespace FireLand
 {

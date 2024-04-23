@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../../hrs/non_creatable.hpp"
-#include "../../hrs/unsized_free_block_chain.hpp"
+#include "hrs/non_creatable.hpp"
+#include "hrs/unsized_free_block_chain.hpp"
 #include "../Allocator/BoundedResourceSize.hpp"
 #include "DataQueue.h"
 #include "../TransferChannel/TransferChannel.h"

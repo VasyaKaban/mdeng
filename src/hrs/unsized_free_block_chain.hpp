@@ -20,15 +20,15 @@ namespace hrs
 		std::pair<block<T>, T> acquire(const mem_req<T> &req) noexcept
 		{
 			if(req.size == 0)
-				return block<T>{0, 0};
+				return {block<T>{0, 0}, 0};
 
 			auto blk_opt = this->acquire_from_existed(req);
 			if(blk_opt)
 				return {blk_opt.value(), 0};
 
 			if(this->blocks.empty())//push back
-				return acquire_from_back_no_blocks(req.size, req.alignment);
-			else if(this->blocks.back().offset + this->blocks.back() == this->size)
+				return acquire_from_back_no_blocks(req);
+			else if(this->blocks.back().offset + this->blocks.back().size == this->size)
 			{
 				T corrected_blk_offset = this->blocks.back().offset + this->outer_offset;
 				T old_size = this->size;

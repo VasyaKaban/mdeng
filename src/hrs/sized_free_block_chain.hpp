@@ -18,7 +18,7 @@ namespace hrs
 
 		std::optional<block<T>> acquire(T block_size, T block_alignment) noexcept
 		{
-			return this->acquire_from_existed(block_size, block_alignment);
+			return this->acquire_from_existed(mem_req<T>(block_size, block_alignment));
 		}
 
 		bool is_hint_valid(std::list<block<T>>::const_iterator hint_it) const noexcept
@@ -56,7 +56,8 @@ namespace hrs
 			}
 		}
 
-		hrs::block<T> acquire_by_hint(std::list<block<T>>::const_iterator hint_it, const mem_req<T> &req) noexcept
+		hrs::block<T> acquire_by_hint(std::list<block<T>>::iterator hint_it,
+									  const mem_req<T> &req) noexcept
 		{
 			hrs::assert_true_debug(hrs::is_iterator_part_of_range_debug(this->blocks, hint_it),
 								   "Passed iterator hint is not part of this chain!");
@@ -73,9 +74,9 @@ namespace hrs
 			}
 			else
 			{
-				auto [remainder_blk, acquire_blk] = split_block(*hint_it, req.alignment).value();
+				auto [remainder_blk, acquire_blk] = this->split_block(*hint_it, req.alignment).value();
 
-				const block<T> out_blk(req.size, acquire_blk->offset);
+				const block<T> out_blk(req.size, acquire_blk.offset);
 				this->handle_block_it(hint_it, req.size, remainder_blk, acquire_blk);
 				return out_blk;
 			}

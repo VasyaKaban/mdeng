@@ -2,9 +2,9 @@
 
 #include <cstdint>
 #include <vector>
-#include "../../hrs/mem_req.hpp"
+#include "hrs/mem_req.hpp"
 #include "../TransferChannel/Data.h"
-#include "../../Vulkan/VulkanInclude.hpp"
+#include "../Vulkan/VulkanInclude.hpp"
 
 namespace FireLand
 {

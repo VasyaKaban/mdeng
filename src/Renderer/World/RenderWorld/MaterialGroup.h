@@ -2,8 +2,8 @@
 
 #include <map>
 #include <unordered_map>
-#include "../../../hrs/hint_cast_object.hpp"
-#include "../../../Vulkan/VulkanInclude.hpp"
+#include "hrs/hint_cast_object.hpp"
+#include "../../Vulkan/VulkanInclude.hpp"
 #include "../../DescriptorStorage/DescriptorStorage.h"
 #include "RenderGroup.h"
 #include "PlainStateful.h"

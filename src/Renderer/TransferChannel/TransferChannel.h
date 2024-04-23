@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../Allocator/BoundedResourceSize.hpp"
-#include "../../hrs/non_creatable.hpp"
+#include "hrs/non_creatable.hpp"
 #include "TransferBufferOp.hpp"
 #include "TransferImageOp.hpp"
 

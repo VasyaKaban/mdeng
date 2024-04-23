@@ -1,8 +1,11 @@
 #include "Context.h"
-#include "../../hrs/iterator_for_each.hpp"
+#include "hrs/iterator_for_each.hpp"
 
 namespace FireLand
 {
+	Context::Context(vk::Instance _instance) noexcept
+		: instance(_instance) {}
+
 	Context::Context(vk::Instance _instance, PhysicalDevicesContainer &&_physical_devices) noexcept
 		: instance(_instance), physical_devices(std::move(_physical_devices)) {}
 
@@ -45,12 +48,17 @@ namespace FireLand
 		if(physical_devs.result != vk::Result::eSuccess)
 			return physical_devs.result;
 
+
+		Context ctx(inst_opt.value.get());
+
 		std::vector<PhysicalDevice> physical_devices;
 		physical_devices.reserve(physical_devs.value.size());
 		for(auto &ph_dev : physical_devs.value)
-			physical_devices.push_back(PhysicalDevice(this, ph_dev));
+			physical_devices.push_back(PhysicalDevice(&ctx, ph_dev));
 
-		return Context(inst_opt.value.release(), std::move(physical_devices));
+		inst_opt.value.release();
+		ctx.physical_devices = std::move(physical_devices);
+		return ctx;
 	}
 
 	Context::~Context()

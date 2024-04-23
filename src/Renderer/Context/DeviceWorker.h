@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../../hrs/expected.hpp"
-#include "../../hrs/instantiation.hpp"
+#include "hrs/expected.hpp"
+#include "hrs/instantiation.hpp"
 
 namespace FireLand
 {

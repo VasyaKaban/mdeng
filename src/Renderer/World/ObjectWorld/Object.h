@@ -3,10 +3,11 @@
 #include <map>
 #include <memory>
 #include <span>
-#include "../../../hrs/non_creatable.hpp"
-#include "../../../hrs/expected.hpp"
-#include "../../../hrs/error.hpp"
+#include "hrs/non_creatable.hpp"
+#include "hrs/expected.hpp"
+#include "hrs/error.hpp"
 #include "../../Allocator/BoundedResourceSize.hpp"
+#include "ObjectInstance.h"
 
 namespace FireLand
 {
@@ -32,7 +33,7 @@ namespace FireLand
 		const ObjectWorld * GetParentObjectWorld() const noexcept;
 
 		void RemoveObjectInstance(const ObjectInstance *oi) noexcept;
-		bool AddObjectInstance(ObjectInstance *oi);
+		bool AddObjectInstance(std::unique_ptr<ObjectInstance> &&oi);
 
 		ObjectInstanceContainer & GetObjectInstances() noexcept;
 		const ObjectInstanceContainer & GetObjectInstances() const noexcept;

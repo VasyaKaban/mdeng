@@ -67,7 +67,7 @@ namespace hrs
 			if(_size != 0 && !blocks.empty())
 			{
 				blocks.erase(std::next(blocks.begin()), blocks.end());
-				blocks.begin()->size = {_size, 0};
+				(*blocks.begin()) = block<T>{_size, 0};
 			}
 			else if(_size != 0)
 			{
@@ -149,6 +149,16 @@ namespace hrs
 			}
 		}
 
+		std::list<block<T>>::iterator begin() noexcept
+		{
+			return blocks.begin();
+		}
+
+		std::list<block<T>>::iterator end() noexcept
+		{
+			return blocks.end();
+		}
+
 		std::list<block<T>>::const_iterator begin() const noexcept
 		{
 			return blocks.cbegin();
@@ -163,8 +173,8 @@ namespace hrs
 
 		constexpr static bool are_blocks_overlapping(const block<T> &blk1, const block<T> &blk2) noexcept
 		{
-			const block<T> &prev_blk = blk1;
-			const block<T> &post_blk = blk2;
+			block<T> prev_blk = blk1;
+			block<T> post_blk = blk2;
 			if(prev_blk.offset > post_blk.offset)
 			{
 				prev_blk = blk2;
@@ -178,7 +188,7 @@ namespace hrs
 
 		std::optional<block<T>> acquire_from_existed(const mem_req<T> &req)
 		{
-			hrs::assert_true_debug(req.is_alignemnt_power_of_two(), "Alignment is not power of two!");
+			hrs::assert_true_debug(req.is_alignment_power_of_two(), "Alignment is not power of two!");
 
 			if(blocks.empty())
 				return {};
@@ -210,7 +220,7 @@ namespace hrs
 						if(acquire_blk.size < req.size)
 							continue;
 
-						const block<T> out_blk(req.size, acquire_blk->offset);
+						const block<T> out_blk(req.size, acquire_blk.offset);
 						handle_block_it(it, req.size, remainder_blk, acquire_blk);
 						return out_blk;
 					}
@@ -220,7 +230,8 @@ namespace hrs
 			return {};
 		}
 
-		constexpr std::optional<std::pair<block<T>, block<T>>> split_block(const block<T> &blk, T block_alignment)
+		constexpr std::optional<std::pair<block<T>, block<T>>>
+		split_block(const block<T> &blk, T block_alignment) const noexcept
 		{
 			T corrected_block_offset = blk.offset + outer_offset;
 			T aligned_corrected_block_offset = hrs::round_up_size_to_alignment(corrected_block_offset, block_alignment);

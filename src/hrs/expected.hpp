@@ -101,15 +101,23 @@ namespace hrs
 		constexpr expected(const expected &ex) noexcept(std::is_nothrow_copy_constructible_v<T> &&
 														std::is_nothrow_copy_constructible_v<E>)
 		{
-			*this = (ex.is_error ? ex.error() : ex.value());
+			if(ex.is_error)
+				*this = ex.error();
+			else
+				*this = ex.value();
+
 			is_error = ex.is_error;
 		}
 
 		constexpr expected(expected &&ex) noexcept(std::is_nothrow_move_constructible_v<T> &&
 												   std::is_nothrow_move_constructible_v<E>)
 		{
-			*this = (ex.is_error ? std::move(ex.error()) : std::move(ex.value()));
-			ex = expected{};
+			if(ex.is_error)
+				*this = std::move(ex.error());
+			else
+				*this = std::move(ex.value());
+
+			//ex = expected{};
 		}
 
 		constexpr expected & operator=(const expected &ex) noexcept(std::is_nothrow_copy_constructible_v<T> &&
@@ -117,7 +125,10 @@ namespace hrs
 		{
 			this->~expected();
 
-			*this = (ex.is_error ? ex.error() : ex.value());
+			if(ex.is_error)
+				*this = ex.error();
+			else
+				*this = ex.value();
 			is_error = ex.is_error;
 
 			return *this;
@@ -128,8 +139,12 @@ namespace hrs
 		{
 			this->~expected();
 
-			*this = (ex.is_error ? std::move(ex.error()) : std::move(ex.value()));
-			ex = expected{};
+			if(ex.is_error)
+				*this = std::move(ex.error());
+			else
+				*this = std::move(ex.value());
+
+			//ex = expected{};
 
 			return *this;
 		}

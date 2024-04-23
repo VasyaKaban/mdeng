@@ -59,12 +59,12 @@ namespace FireLand
 							 std::move(index_buffer.value()));
 	}
 
-	bool ObjectWorld::AddObject(std::string_view name, Object *object)
+	bool ObjectWorld::AddObject(std::string_view name, std::unique_ptr<Object> &&object)
 	{
 		if(HasObject(name))
 			return false;
 
-		objects.insert(std::pair{name, std::unique_ptr<Object>(object)});
+		objects.insert(std::pair{name, std::move(object)});
 		return true;
 	}
 

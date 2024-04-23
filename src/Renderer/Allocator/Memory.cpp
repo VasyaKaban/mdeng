@@ -1,6 +1,6 @@
 #include "Memory.h"
 #include <utility>
-#include "../../hrs/debug.hpp"
+#include "hrs/debug.hpp"
 
 namespace FireLand
 {

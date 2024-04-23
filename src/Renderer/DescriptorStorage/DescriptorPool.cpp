@@ -1,5 +1,3 @@
-#pragma once
-
 #include "DescriptorPool.h"
 #include "DescriptorStorage.h"
 #include "../Context/Device.h"

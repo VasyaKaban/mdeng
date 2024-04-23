@@ -1,9 +1,9 @@
 #pragma once
 
-#include "../../Vulkan/VulkanInclude.hpp"
-#include "../../hrs/expected.hpp"
-#include "../../hrs/non_creatable.hpp"
-#include "../../hrs/instantiation.hpp"
+#include "../Vulkan/VulkanInclude.hpp"
+#include "hrs/expected.hpp"
+#include "hrs/non_creatable.hpp"
+#include "hrs/instantiation.hpp"
 #include "PhysicalDevice.h"
 #include "Surface.h"
 
@@ -24,6 +24,7 @@ namespace FireLand
 		using SurfacesContainer = std::list<Surface>;
 		using DebugMessengersContainer = std::list<vk::DebugUtilsMessengerEXT>;
 	private:
+		Context(vk::Instance _instance) noexcept;
 		Context(vk::Instance _instance, PhysicalDevicesContainer &&_physical_devices) noexcept;
 	public:
 

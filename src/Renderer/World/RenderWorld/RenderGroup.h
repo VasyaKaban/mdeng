@@ -1,8 +1,8 @@
 #pragma once
 
 #include <cstdint>
-#include "../../../hrs/error.hpp"
-#include "../../../Vulkan/VulkanInclude.hpp"
+#include "hrs/error.hpp"
+#include "../../Vulkan/VulkanInclude.hpp"
 #include "../../DataIndexStorage/IndexPool.h"
 #include "PlainStateful.h"
 

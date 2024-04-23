@@ -3,9 +3,9 @@
 #include <cstdint>
 #include <span>
 #include <unordered_map>
-#include "../../../hrs/non_creatable.hpp"
-#include "../../../hrs/block.hpp"
-#include "../../../Vulkan/VulkanInclude.hpp"
+#include "hrs/non_creatable.hpp"
+#include "hrs/block.hpp"
+#include "../../Vulkan/VulkanInclude.hpp"
 #include "ObjectMeshBinding.h"
 #include "../../TransferChannel/Data.h"
 

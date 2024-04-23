@@ -253,7 +253,8 @@ namespace FireLand
 	}
 
 	std::optional<hrs::block<vk::DeviceSize>>
-	MemoryPool::acquire_block_based_on_granularity(ResourceType res_type, hrs::mem_req<vk::DeviceSize> req)
+	MemoryPool::acquire_block_based_on_granularity(ResourceType res_type,
+												   hrs::mem_req<vk::DeviceSize> req)
 	{
 		MemoryPoolType type = GetType();
 		const bool can_be_acquired_without_granularity_use =

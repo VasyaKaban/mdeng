@@ -2,8 +2,8 @@
 
 #include <vector>
 #include "../Allocator/BoundedResourceSize.hpp"
-#include "../../hrs/non_creatable.hpp"
-#include "../../hrs/unsized_free_block_chain.hpp"
+#include "hrs/non_creatable.hpp"
+#include "hrs/unsized_free_block_chain.hpp"
 
 namespace FireLand
 {

@@ -4,9 +4,9 @@
 #include <map>
 #include <unordered_map>
 #include <set>
-#include "../../../hrs/non_creatable.hpp"
-#include "../../../hrs/mem_req.hpp"
-#include "../../../Vulkan/VulkanInclude.hpp"
+#include "hrs/non_creatable.hpp"
+#include "hrs/mem_req.hpp"
+#include "../../Vulkan/VulkanInclude.hpp"
 #include "../../DataBuffer/DataBuffer.h"
 #include "../../DataIndexStorage/DataIndexStorage.h"
 #include "../../DescriptorStorage/DescriptorStorage.h"
@@ -32,6 +32,22 @@ namespace FireLand
 		bool operator()(const DescriptorSetGroupKey &key, const Material *mtl2) const noexcept
 		{
 			return key.material_compare->CompareLess(mtl2);
+		}
+
+		bool operator()(const DescriptorSetGroupKey &key1,
+						const DescriptorSetGroupKey &key2) const noexcept
+		{
+			return key1.material_compare->CompareLess(key2.material_compare);
+		}
+
+		bool operator()(const Material *mtl1, const Material *mtl2) const noexcept
+		{
+			return mtl1->CompareLess(mtl2);
+		}
+
+		bool operator()(const Material *mtl, const DescriptorSetGroupKey &key) const noexcept
+		{
+			return mtl->CompareLess(key.material_compare);
 		}
 	};
 

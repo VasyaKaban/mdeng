@@ -1,6 +1,6 @@
 #include "Surface.h"
 #include "Context.h"
-#include "../../hrs/debug.hpp"
+#include "hrs/debug.hpp"
 #include <ranges>
 
 namespace FireLand
