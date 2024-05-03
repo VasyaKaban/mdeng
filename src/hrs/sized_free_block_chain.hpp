@@ -36,23 +36,20 @@ namespace hrs
 			if(hint_it->size < block_size)
 				return false;
 
-			if(hint_it->size >= block_size)
+			T corrected_it_blk_offset = hint_it->offset + this->outer_offset;
+			if(hrs::is_multiple_of(corrected_it_blk_offset, block_alignment))
+				return true;
+			else
 			{
-				T corrected_it_blk_offset = hint_it->offset + this->outer_offset;
-				if(hrs::is_multiple_of(corrected_it_blk_offset, block_alignment))
-					return true;
-				else
-				{
-					auto split_opt = this->split_block(*hint_it, block_alignment);
-					if(!split_opt)
-						return false;
+				auto split_opt = this->split_block(*hint_it, block_alignment);
+				if(!split_opt)
+					return false;
 
-					auto [remainder_blk, acquire_blk] = split_opt.value();
-					if(acquire_blk.size < block_size)
-						return false;
+				auto [remainder_blk, acquire_blk] = split_opt.value();
+				if(acquire_blk.size < block_size)
+					return false;
 
-					return true;
-				}
+				return true;
 			}
 		}
 

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -85,6 +85,10 @@ set(DATA_BUFFER_FOLDER_SOURCES
 	DataBuffer/DataBuffer.h
 	DataBuffer/DataBuffer.cpp)
 
+set(SWAPCHAIN_FOLDER_SOURCES
+	Swapchain/Swapchain.h
+	Swapchain/Swapchain.cpp)
+
 add_library(
 	Renderer STATIC
 		${VULKAN_FOLDER_SOURCES}
@@ -94,8 +98,14 @@ add_library(
 		${WORLD_FOLDER_SOURCES}
 		${DESCRIPTOR_STORAGE_FOLDER_SOURCES}
 		${DATA_INDEX_STORAGE_FOLDER_SOURCES}
-		${DATA_BUFFER_FOLDER_SOURCES})
+		${DATA_BUFFER_FOLDER_SOURCES}
+		${SWAPCHAIN_FOLDER_SOURCES}
+	)
+
+find_package(Vulkan REQUIRED)
 
 link_directories(../hrs)
-target_link_libraries(Renderer PRIVATE Hrs)
+target_link_libraries(Renderer
+	                    PRIVATE Hrs
+						PRIVATE ${Vulkan_LIBRARIES})
 target_include_directories(Renderer PUBLIC ../)

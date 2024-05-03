@@ -43,4 +43,9 @@ namespace hrs
 	struct non_copyable : non_copy_constructible, non_copy_assignable {};
 
 	struct non_movable : non_move_constructible, non_move_assignable {};
+
+	struct non_creatable : non_copyable, non_movable
+	{
+		non_creatable() = delete;
+	};
 };

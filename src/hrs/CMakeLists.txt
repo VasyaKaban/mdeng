@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -17,7 +17,8 @@ set(HRS_SOURCES
 	free_block_chain_base.hpp
 	sized_free_block_chain.hpp
 	unsized_free_block_chain.hpp
-	hint_cast_object.hpp)
+	hint_cast_object.hpp
+	enum_meta.hpp)
 
 set(HRS_MATH_SOURCES
 	math/math_common.hpp
