@@ -1,207 +1,120 @@
 #include "Context.h"
-#include "hrs/iterator_for_each.hpp"
 
 namespace FireLand
 {
-	Context::Context(vk::Instance _instance) noexcept
-		: instance(_instance) {}
-
-	Context::Context(vk::Instance _instance, PhysicalDevicesContainer &&_physical_devices) noexcept
-		: instance(_instance), physical_devices(std::move(_physical_devices)) {}
-
-	hrs::expected<std::uint32_t, vk::Result> Context::GetVersion() noexcept
-	{
-		auto version = vk::enumerateInstanceVersion();
-		if(version.result != vk::Result::eSuccess)
-			return version.result;
-
-		return version.value;
-	}
-
-	hrs::expected<std::vector<vk::ExtensionProperties>, vk::Result>
-	Context::GetSupportedExtensions(const std::string &layer_name)
-	{
-		auto extensions = vk::enumerateInstanceExtensionProperties(layer_name);
-		if(extensions.result != vk::Result::eSuccess)
-			return extensions.result;
-
-
-		return extensions.value;
-	}
-
-	hrs::expected<std::vector<vk::LayerProperties>, vk::Result> Context::GetSupportedLayers()
-	{
-		auto layers = vk::enumerateInstanceLayerProperties();
-		if(layers.result != vk::Result::eSuccess)
-			return layers.result;
-
-		return layers.value;
-	}
-
-	hrs::expected<Context, vk::Result> Context::Create(const vk::InstanceCreateInfo &info)
-	{
-		auto inst_opt = vk::createInstanceUnique(info);
-		if(inst_opt.result != vk::Result::eSuccess)
-			return inst_opt.result;
-
-		auto physical_devs = inst_opt.value.get().enumeratePhysicalDevices();
-		if(physical_devs.result != vk::Result::eSuccess)
-			return physical_devs.result;
-
-
-		Context ctx(inst_opt.value.get());
-
-		std::vector<PhysicalDevice> physical_devices;
-		physical_devices.reserve(physical_devs.value.size());
-		for(auto &ph_dev : physical_devs.value)
-			physical_devices.push_back(PhysicalDevice(&ctx, ph_dev));
-
-		inst_opt.value.release();
-		ctx.physical_devices = std::move(physical_devices);
-		return ctx;
-	}
-
 	Context::~Context()
 	{
 		Destroy();
 	}
 
 	Context::Context(Context &&ctx) noexcept
-		: instance(std::exchange(ctx.instance, VK_NULL_HANDLE)),
-		  physical_devices(std::move(ctx.physical_devices)),
-		  surfaces(std::move(ctx.surfaces)),
-		  debug_messengers(ctx.debug_messengers) {}
+		: library(std::move(ctx.library)),
+		  library_name(std::move(ctx.library_name)),
+		  global_loader(ctx.global_loader),
+		  context_destructors(ctx.context_destructors),
+		  instances(std::move(ctx.instances)) {}
 
 	Context & Context::operator=(Context &&ctx) noexcept
 	{
 		Destroy();
-		instance = std::exchange(ctx.instance, VK_NULL_HANDLE);
-		physical_devices = std::move(ctx.physical_devices);
-		surfaces = std::move(ctx.surfaces);
-		debug_messengers = std::move(ctx.debug_messengers);
+
+		library = std::move(ctx.library);
+		library_name = std::move(ctx.library_name);
+		global_loader = ctx.global_loader;
+		context_destructors = ctx.context_destructors;
+		instances = std::move(ctx.instances);
+
 		return *this;
 	}
 
-	void Context::Destroy()
+	bool Context::Init(std::span<const char * const> library_names) noexcept
 	{
-		if(instance)
-		{
-			physical_devices.clear();
-			surfaces.clear();
+		Destroy();
 
-			for(auto &messenger : debug_messengers)
-				instance.destroy(messenger);
+		VulkanLibrary _library;
+		auto lib_index_opt = _library.Open(library_names);
+		if(!lib_index_opt)
+			return false;
 
-			debug_messengers.clear();
-			instance.destroy();
-			instance = VK_NULL_HANDLE;
-		}
+		GlobalLoader _global_loader;
+		bool loader_init = _global_loader.Init(_library);
+		if(!loader_init)
+			return false;
+
+		library = std::move(_library);
+		library_name = library_names[*lib_index_opt];
+		global_loader = _global_loader;
+		context_destructors.Init(global_loader.vkGetInstanceProcAddr);
+
+		return true;
+	}
+
+	void Context::Destroy() noexcept
+	{
+		if(!IsCreated())
+			return;
+
+		instances.clear();
+		library.Close();
 	}
 
 	bool Context::IsCreated() const noexcept
 	{
-		return instance;
+		return library.IsOpen();
 	}
 
-	const Context::PhysicalDevicesContainer & Context::GetPhysicalDevices() const noexcept
+	Context::operator bool() const noexcept
 	{
-		return physical_devices;
+		return IsCreated();
 	}
 
-	PhysicalDevice & Context::GetPhysicalDevice(std::size_t index) noexcept
+	const std::string & Context::GetLibraryName() const noexcept
 	{
-		return physical_devices[index];
+		return library_name;
 	}
 
-	const PhysicalDevice & Context::GetPhysicalDevice(std::size_t index) const noexcept
+	const VulkanLibrary & Context::GetLibrary() const noexcept
 	{
-		return physical_devices[index];
+		return library;
 	}
 
-	const Context::SurfacesContainer & Context::GetSurfaces() const noexcept
+	const GlobalLoader & Context::GetGlobalLoader() const noexcept
 	{
-		return surfaces;
+		return global_loader;
 	}
 
-	Surface & Context::GetSurface(std::size_t index) noexcept
+	const ContextDestructors & Context::GetContextDestructors() const noexcept
 	{
-		return *std::next(surfaces.begin(), index);
+		return context_destructors;
 	}
 
-	const Surface & Context::GetSurface(std::size_t index) const noexcept
+	void Context::AddInstance(Instance *instance)
 	{
-		return *std::next(surfaces.begin(), index);
+		for(const auto &i : instances)
+			if(i.get() == instance)
+				return;
+
+		instances.push_back(std::unique_ptr<Instance>(instance));
 	}
 
-	void Context::DropSurface(SurfacesContainer::const_iterator it) noexcept
+	void Context::DeleteInstance(Instance *instance) noexcept
 	{
-		hrs::assert_true_debug(hrs::is_iterator_part_of_range_debug(surfaces, it),
-							   "Surface is not a part of this context!");
-
-		surfaces.erase(it);
-	}
-
-	void Context::DropSurface(const Surface &surface) noexcept
-	{
-		hrs::iterator_for_each(surfaces, [&](SurfacesContainer::iterator iter) -> bool
+		auto it = std::ranges::find_if(instances, [instance](const std::unique_ptr<Instance> &i)
 		{
-			if(iter->GetHandle() == surface.GetHandle())
-			{
-				surfaces.erase(iter);
-				return true;
-			}
-
-			return false;
+			return i.get() == instance;
 		});
+
+		if(it != instances.end())
+			instances.erase(it);
 	}
 
-	const Context::DebugMessengersContainer & Context::GetDebugMessengers() const noexcept
+	bool Context::HasInstance(Instance *instance) const noexcept
 	{
-		return debug_messengers;
-	}
-
-	vk::DebugUtilsMessengerEXT Context::GetDebugMessenger(std::size_t index) const noexcept
-	{
-		return *std::next(debug_messengers.begin(), index);
-	}
-
-	void Context::DropDebugMessenger(vk::DebugUtilsMessengerEXT messenger) noexcept
-	{
-		hrs::iterator_for_each(debug_messengers, [&](DebugMessengersContainer::iterator iter) -> bool
+		auto it = std::ranges::find_if(instances, [instance](const std::unique_ptr<Instance> &i)
 		{
-			if(*iter == messenger)
-			{
-				instance.destroy(messenger);
-				debug_messengers.erase(iter);
-				return true;
-			}
-
-			return false;
+			return i.get() == instance;
 		});
-	}
 
-	void Context::DropDebugMessenger(DebugMessengersContainer::const_iterator it) noexcept
-	{
-		hrs::assert_true_debug(hrs::is_iterator_part_of_range_debug(debug_messengers, it),
-							   "Debug messenger is not a part of this context!");
-
-		instance.destroy(*it);
-		debug_messengers.erase(it);
-	}
-
-	vk::Instance Context::GetHandle() const noexcept
-	{
-		return instance;
-	}
-
-	hrs::expected<vk::DebugUtilsMessengerEXT, vk::Result>
-	Context::CreateDebugMessenger(const vk::DebugUtilsMessengerCreateInfoEXT &info) noexcept
-	{
-		auto [messenger_res, messenger] = instance.createDebugUtilsMessengerEXT(info);
-		if(messenger_res != vk::Result::eSuccess)
-			return messenger_res;
-
-		debug_messengers.push_back(messenger);
-		return *std::prev(debug_messengers.end());
+		return it != instances.end();
 	}
 };

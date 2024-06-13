@@ -4,10 +4,7 @@
 #include <concepts>
 #include <cstdint>
 #include <string_view>
-
-#ifndef HRS_ERROR_NO_SOURCE_LOCATION
-#include <source_location>
-#endif
+#include "enum_meta.hpp"
 
 namespace hrs
 {
@@ -77,7 +74,7 @@ namespace hrs
 		constexpr static void traits_hint() noexcept {};
 		constexpr static std::string_view get_name(E value) noexcept
 		{
-			return "";
+			return enum_meta<E>::get_name(value);
 		}
 	};
 
@@ -92,20 +89,11 @@ namespace hrs
 
 		~error() = default;
 
-#ifndef HRS_ERROR_NO_SOURCE_LOCATION
-		template<typename E>
-			requires std::is_enum_v<E>
-		constexpr error(E e, const std::source_location &_loc = std::source_location::current()) noexcept
-			: value(static_cast<std::underlying_type_t<E>>(e)),
-			  traits_hint(enum_error_traits<E>::traits_hint),
-			  source(_loc) {}
-#else
 		template<typename E>
 			requires std::is_enum_v<E>
 		constexpr error(E e) noexcept
 			: value(static_cast<std::underlying_type_t<E>>(e)),
 			  traits_hint(enum_error_traits<E>::traits_hint) {}
-#endif
 
 		constexpr error(const error &) = default;
 		constexpr error & operator=(const error &) = default;
@@ -148,12 +136,6 @@ namespace hrs
 						"");
 		}
 
-#ifndef HRS_ERROR_NO_SOURCE_LOCATION
-		constexpr const std::source_location & get_source_location() const noexcept
-		{
-			return source;
-		}
-#endif
 		constexpr enum_value get_raw_value() const noexcept
 		{
 			return value;
@@ -223,9 +205,6 @@ namespace hrs
 		}
 	private:
 		enum_value value;
-#ifndef HRS_ERROR_NO_SOURCE_LOCATION
-		std::source_location source;
-#endif
 		traits_hint_type traits_hint;
 	};
 };

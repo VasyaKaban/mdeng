@@ -1,13 +1,29 @@
 #include "Window.h"
-#include <vulkan/vulkan_core.h>
+#include "WindowSubSystem.h"
+
+#ifdef SDL_VIDEO_DRIVER_WINDOWS
+#include <windows.h>
+#include <vulkan/vulkan_win32.h>
+#endif
+#ifdef SDL_VIDEO_DRIVER_X11
+#define VK_USE_PLATFORM_XLIB_KHR
+#include <X11/Xlib.h>
+#include <vulkan/vulkan_xlib.h>
+#endif
+#ifdef SDL_VIDEO_DRIVER_WAYLAND
+#include <vulkan/vulkan_wayland.h>
+#endif
 
 namespace View
 {
-	Window::Window() noexcept
-		: handle(nullptr) {}
+	Window::Window(WindowSubSystem *_parent_sub_system,
+				   SDL_Window *_handle) noexcept
+		: parent_sub_system(_parent_sub_system),
+		  handle(_handle) {}
 
-	Window::Window(WindowHandle _handle) noexcept
-		: handle(_handle) {}
+	Window::Window() noexcept
+		: parent_sub_system(nullptr),
+		  handle(nullptr) {}
 
 	Window::~Window()
 	{
@@ -15,29 +31,28 @@ namespace View
 	}
 
 	Window::Window(Window &&w) noexcept
-		: handle(std::exchange(w.handle, nullptr)),
-		  window_event_handlers(std::move(w.window_event_handlers)),
-		  keyboard_event_handlers(std::move(w.keyboard_event_handlers)),
-		  mouse_motion_event_handlers(std::move(w.mouse_motion_event_handlers)),
-		  mouse_button_event_handlers(std::move(w.mouse_button_event_handlers)),
-		  mouse_wheel_event_handlers(std::move(w.mouse_wheel_event_handlers)),
-		  quit_event_handlers(std::move(w.quit_event_handlers)),
-		  user_event_handlers(std::move(w.user_event_handlers)) {}
+		: parent_sub_system(std::exchange(w.parent_sub_system, nullptr)),
+		  handle(std::exchange(w.handle, nullptr)),
+		  event_handlers(std::move(w.event_handlers)) {}
 
 	Window & Window::operator=(Window &&w) noexcept
 	{
 		Destroy();
 
+		parent_sub_system = std::exchange(w.parent_sub_system, nullptr);
 		handle = std::exchange(w.handle, nullptr);
-		window_event_handlers = std::move(w.window_event_handlers);
-		keyboard_event_handlers = std::move(w.keyboard_event_handlers);
-		mouse_motion_event_handlers = std::move(w.mouse_motion_event_handlers);
-		mouse_button_event_handlers = std::move(w.mouse_button_event_handlers);
-		mouse_wheel_event_handlers = std::move(w.mouse_wheel_event_handlers);
-		quit_event_handlers = std::move(w.quit_event_handlers);
-		user_event_handlers = std::move(w.user_event_handlers);
+		event_handlers = std::move(w.event_handlers);
 
 		return *this;
+	}
+
+	void Window::Destroy() noexcept
+	{
+		if(!IsCreated())
+			return;
+
+		handle = (SDL_DestroyWindow(handle), nullptr);
+		parent_sub_system = nullptr;
 	}
 
 	bool Window::IsCreated() const noexcept
@@ -50,29 +65,171 @@ namespace View
 		return IsCreated();
 	}
 
-	void Window::Destroy() noexcept
+	std::span<const char *> Window::EnumerateVulkanExtensions() const
 	{
-		if(!IsCreated())
-			return;
+		auto sys_wm_type_exp = GetWindowManagerInfo();
+		if(!sys_wm_type_exp)
+			return {};
 
-		window_event_handlers.Clear();
-		keyboard_event_handlers.Clear();
-		mouse_motion_event_handlers.Clear();
-		mouse_button_event_handlers.Clear();
-		mouse_wheel_event_handlers.Clear();
-		quit_event_handlers.Clear();
-		user_event_handlers.Clear();
+		switch(sys_wm_type_exp->subsystem)
+		{
+#ifdef SDL_VIDEO_DRIVER_WINDOWS
+			case SDL_SYSWM_TYPE::SDL_SYSWM_WINDOWS:
+				{
+					static std::array extensions =
+					{
+						VK_KHR_SURFACE_EXTENSION_NAME,
+						VK_KHR_WIN32_SURFACE_EXTENSION_NAME
+					};
 
-		SDL_DestroyWindow(handle);
-		handle = nullptr;
+					return extensions;
+				}
+				break;
+#endif
+#ifdef SDL_VIDEO_DRIVER_X11
+			case SDL_SYSWM_TYPE::SDL_SYSWM_X11:
+				{
+					static std::array extensions =
+					{
+						VK_KHR_SURFACE_EXTENSION_NAME,
+						VK_KHR_XLIB_SURFACE_EXTENSION_NAME
+					};
+
+					return extensions;
+				}
+				break;
+#endif
+#ifdef SDL_VIDEO_DRIVER_WAYLAND
+			case SDL_SYSWM_TYPE::SDL_SYSWM_WAYLAND:
+				{
+					static std::array extensions =
+					{
+						VK_KHR_SURFACE_EXTENSION_NAME,
+						VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME
+					};
+
+					return extensions;
+				}
+				break;
+#endif
+			default:
+				return {};
+				break;
+		}
 	}
 
-	void Window::Resize(const Resolution &resolution) noexcept
+	hrs::expected<VkSurfaceKHR, VkResult>
+	Window::CreateSurface(PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr,
+						  VkInstance instance,
+						  const VkAllocationCallbacks *allocation_callbacks) const noexcept
+	{
+		if(instance == VK_NULL_HANDLE || !vkGetInstanceProcAddr)
+			return VkResult::VK_ERROR_INITIALIZATION_FAILED;
+
+		auto sys_wm_info_exp = GetWindowManagerInfo();
+		if(!sys_wm_info_exp)
+			return VkResult::VK_ERROR_INITIALIZATION_FAILED;
+
+		auto func_name = get_vulkan_surface_create_function_name(sys_wm_info_exp->subsystem);
+		if(!func_name)
+			return VkResult::VK_ERROR_INITIALIZATION_FAILED;
+
+		auto func = vkGetInstanceProcAddr(instance, func_name);
+		if(!func)
+			return VkResult::VK_ERROR_INITIALIZATION_FAILED;
+
+		VkSurfaceKHR surface = VK_NULL_HANDLE;
+		switch(sys_wm_info_exp->subsystem)
+		{
+#ifdef SDL_VIDEO_DRIVER_WINDOWS
+			case SDL_SYSWM_TYPE::SDL_SYSWM_WINDOWS:
+				{
+					auto vkCreateSurface = reinterpret_cast<PFN_vkCreateWin32SurfaceKHR>(func);
+					const VkWin32SurfaceCreateInfoKHR info =
+					{
+						.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
+						.pNext = nullptr,
+						.flags = {},
+						.hinstance = sys_wm_info_exp->info.win.hinstance,
+						.hwnd = sys_wm_info_exp->info.win.window
+					};
+
+					auto res = vkCreateSurface(instance, &info, allocation_callbacks, &surface);
+					if(res != VkResult::VK_SUCCESS)
+						return res;
+				}
+				break;
+#endif
+#ifdef SDL_VIDEO_DRIVER_X11
+			case SDL_SYSWM_TYPE::SDL_SYSWM_X11:
+				{
+					auto vkCreateSurface = reinterpret_cast<PFN_vkCreateXlibSurfaceKHR>(func);
+					const VkXlibSurfaceCreateInfoKHR info =
+						{
+							.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,
+							.pNext = nullptr,
+							.flags = {},
+							.dpy = sys_wm_info_exp->info.x11.display,
+							.window = sys_wm_info_exp->info.x11.window
+						};
+
+					auto res = vkCreateSurface(instance, &info, allocation_callbacks, &surface);
+					if(res != VkResult::VK_SUCCESS)
+						return res;
+				}
+				break;
+#endif
+#ifdef SDL_VIDEO_DRIVER_WAYLAND
+			case SDL_SYSWM_TYPE::SDL_SYSWM_WAYLAND:
+				{
+					auto vkCreateSurface = reinterpret_cast<PFN_vkCreateWaylandSurfaceKHR>(func);
+					const VkWaylandSurfaceCreateInfoKHR info =
+					{
+						.sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR,
+						.pNext = nullptr,
+						.flags = {},
+						.display = sys_wm_info_exp->info.wl.display,
+						.surface = sys_wm_info_exp->info.wl.surface
+					};
+
+					auto res = vkCreateSurface(instance, &info, allocation_callbacks, &surface);
+					if(res != VkResult::VK_SUCCESS)
+						return res;
+				}
+				break;
+#endif
+			default:
+				return VkResult::VK_ERROR_INITIALIZATION_FAILED;
+				break;
+		}
+
+		return surface;
+	}
+
+	std::pair<unsigned int, unsigned int> Window::GetResolution() const noexcept
+	{
+		if(!IsCreated())
+			return {0, 0};
+
+		int w, h;
+		SDL_GetWindowSize(handle, &w, &h);
+		return {w, h};
+	}
+
+	void Window::SetResolution(unsigned int width, unsigned int height) noexcept
 	{
 		if(!IsCreated())
 			return;
 
-		SDL_SetWindowSize(handle, resolution.width, resolution.height);
+		SDL_SetWindowSize(handle, width, height);
+	}
+
+	std::string Window::GetTitle() const
+	{
+		if(!IsCreated())
+			return "";
+
+		return SDL_GetWindowTitle(handle);
 	}
 
 	void Window::SetTitle(const char *title) noexcept
@@ -80,222 +237,86 @@ namespace View
 		if(!IsCreated())
 			return;
 
+
 		SDL_SetWindowTitle(handle, title);
 	}
 
-	void Window::SetBorderState(bool bordered) noexcept
+	void Window::WarpMouse(int x, int y) noexcept
 	{
 		if(!IsCreated())
 			return;
 
-		SDL_SetWindowBordered(handle, static_cast<SDL_bool>(bordered));
+		SDL_WarpMouseInWindow(handle, x, y);
 	}
 
-	void Window::SetResizableState(bool resizable) noexcept
+	void Window::SetFullscreenState(Uint32 flags) noexcept
 	{
 		if(!IsCreated())
 			return;
 
-		SDL_SetWindowResizable(handle, static_cast<SDL_bool>(resizable));
+		SDL_SetWindowFullscreen(handle, flags);
 	}
 
-	void Window::SetPosition(const Position &position) noexcept
+	hrs::expected<SDL_SysWMinfo, const char *> Window::GetWindowManagerInfo() const noexcept
 	{
+		SDL_SysWMinfo info;
+		SDL_VERSION(&info.version)
+
 		if(!IsCreated())
-			return;
+			return "Bad window handle!";//-> assert maybe?
 
-		SDL_SetWindowPosition(handle, position.x, position.y);
-	}
-
-	Window::Resolution Window::GetResolution() const noexcept
-	{
-		Resolution res;
-		if(IsCreated())
-			SDL_GetWindowSize(handle, &res.width, &res.height);
-
-		return res;
-	}
-
-	Window::Resolution Window::GetVulkanSurfaceResolution() const noexcept
-	{
-		Resolution res;
-		if(IsCreated())
-			SDL_Vulkan_GetDrawableSize(handle, &res.width, &res.height);
-
-		return res;
-	}
-
-	hrs::expected<std::vector<const char *>, Error> Window::GetVulkanInstanceExtensions() const noexcept
-	{
-		std::vector<const char *> names;
-		if(IsCreated())
-		{
-			unsigned int count;
-			auto res = SDL_Vulkan_GetInstanceExtensions(handle, &count, nullptr);
-			if(res == SDL_FALSE)
-				return Error(SDL_GetError());
-
-			names.resize(count);
-			res = SDL_Vulkan_GetInstanceExtensions(handle, &count, names.data());
-			if(res == SDL_FALSE)
-				return Error(SDL_GetError());
-		}
-
-		return names;
-	}
-
-	hrs::expected<VkSurfaceKHR, Error> Window::CreateVulkanSurface(VkInstance instance) const noexcept
-	{
-		if(!IsCreated())
-			return VkSurfaceKHR(VK_NULL_HANDLE);
-
-		VkSurfaceKHR surface;
-		auto res = SDL_Vulkan_CreateSurface(handle, instance, &surface);
+		auto res = SDL_GetWindowWMInfo(handle, &info);
 		if(res == SDL_FALSE)
-			return Error(SDL_GetError());
+			return SDL_GetError();
 
-		return surface;
+		return info;
 	}
 
-	void Window::HandleEvent(const SDL_Event &event) const noexcept
+	EventHandlers & Window::GetEventHandlers() noexcept
 	{
-		switch(event.type)
+		return event_handlers;
+	}
+
+	const EventHandlers & Window::GetEventHandlers() const noexcept
+	{
+		return event_handlers;
+	}
+
+	WindowSubSystem * Window::GetParentSubSystem() noexcept
+	{
+		return parent_sub_system;
+	}
+
+	const WindowSubSystem * Window::GetParentSubSystem() const noexcept
+	{
+		return parent_sub_system;
+	}
+
+	Uint32 Window::GetID() const noexcept
+	{
+		if(!IsCreated())
+			return 0;
+
+		return SDL_GetWindowID(handle);
+	}
+
+	const char * Window::get_vulkan_surface_create_function_name(SDL_SYSWM_TYPE type) const noexcept
+	{
+		switch(type)
 		{
-			case SDL_WINDOWEVENT:
-				HandleEvent(event.window);
+			case SDL_SYSWM_TYPE::SDL_SYSWM_WINDOWS:
+				return "vkCreateWin32SurfaceKHR";
 				break;
-			case SDL_KEYDOWN:
-			case SDL_KEYUP:
-				HandleEvent(event.key);
+			case SDL_SYSWM_TYPE::SDL_SYSWM_X11:
+				return "vkCreateXlibSurfaceKHR";
 				break;
-			case SDL_MOUSEMOTION:
-				HandleEvent(event.motion);
+			case SDL_SYSWM_TYPE::SDL_SYSWM_WAYLAND:
+				return "vkCreateWaylandSurfaceKHR";
 				break;
-			case SDL_MOUSEBUTTONDOWN:
-			case SDL_MOUSEBUTTONUP:
-				HandleEvent(event.button);
-				break;
-			case SDL_MOUSEWHEEL:
-				HandleEvent(event.wheel);
-				break;
-			case SDL_QUIT:
-				HandleEvent(event.quit);
-				break;
-			case SDL_USEREVENT:
-				HandleEvent(event.user);
+			default:
+				return nullptr;
 				break;
 		}
-	}
-
-	void Window::HandleEvent(const SDL_WindowEvent &event) const noexcept
-	{
-		for(auto &[_, handler] : window_event_handlers.GetHandlers())
-			handler(event);
-	}
-
-	void Window::HandleEvent(const SDL_KeyboardEvent &event) const noexcept
-	{
-		for(auto &[_, handler] : keyboard_event_handlers.GetHandlers())
-			handler(event);
-	}
-
-	void Window::HandleEvent(const SDL_MouseMotionEvent &event) const noexcept
-	{
-		for(auto &[_, handler] : mouse_motion_event_handlers.GetHandlers())
-			handler(event);
-	}
-
-	void Window::HandleEvent(const SDL_MouseButtonEvent &event) const noexcept
-	{
-		for(auto &[_, handler] : mouse_button_event_handlers.GetHandlers())
-			handler(event);
-	}
-
-	void Window::HandleEvent(const SDL_MouseWheelEvent &event) const noexcept
-	{
-		for(auto &[_, handler] : mouse_wheel_event_handlers.GetHandlers())
-			handler(event);
-	}
-
-	void Window::HandleEvent(const SDL_QuitEvent &event) const noexcept
-	{
-		for(auto &[_, handler] : quit_event_handlers.GetHandlers())
-			handler(event);
-	}
-
-	void Window::HandleEvent(const SDL_UserEvent &event) const noexcept
-	{
-		for(auto &[_, handler] : user_event_handlers.GetHandlers())
-			handler(event);
-	}
-
-	WindowEventHandlerContainer & Window::GetWindowEventHandlers() noexcept
-	{
-		return window_event_handlers;
-	}
-
-	KeyboardEventHandlerContainer & Window::GetKeyboardEventHandlers() noexcept
-	{
-		return keyboard_event_handlers;
-	}
-
-	MouseMotionEventHandlerContainer & Window::GetMouseMotionEventHandlers() noexcept
-	{
-		return mouse_motion_event_handlers;
-	}
-
-	MouseButtonEventHandlerContainer & Window::GetMouseButtonEventHandlers() noexcept
-	{
-		return mouse_button_event_handlers;
-	}
-
-	MouseWheelEventHandlerContainer & Window::GetMouseWheelEventHandlers() noexcept
-	{
-		return mouse_wheel_event_handlers;
-	}
-
-	QuitEventHandlerContainer & Window::GetQuitEventHandlers() noexcept
-	{
-		return quit_event_handlers;
-	}
-
-	UserEventHandlerContainer & Window::GetUserEventHandlers() noexcept
-	{
-		return user_event_handlers;
-	}
-
-	const WindowEventHandlerContainer & Window::GetWindowEventHandlers() const noexcept
-	{
-		return window_event_handlers;
-	}
-
-	const KeyboardEventHandlerContainer & Window::GetKeyboardEventHandlers() const noexcept
-	{
-		return keyboard_event_handlers;
-	}
-
-	const MouseMotionEventHandlerContainer & Window::GetMouseMotionEventHandlers() const noexcept
-	{
-		return mouse_motion_event_handlers;
-	}
-
-	const MouseButtonEventHandlerContainer & Window::GetMouseButtonEventHandlers() const noexcept
-	{
-		return mouse_button_event_handlers;
-	}
-
-	const MouseWheelEventHandlerContainer & Window::GetMouseWheelEventHandlers() const noexcept
-	{
-		return mouse_wheel_event_handlers;
-	}
-
-	const QuitEventHandlerContainer & Window::GetQuitEventHandlers() const noexcept
-	{
-		return quit_event_handlers;
-	}
-
-	const UserEventHandlerContainer & Window::GetUserEventHandlers() const noexcept
-	{
-		return user_event_handlers;
 	}
 };
+

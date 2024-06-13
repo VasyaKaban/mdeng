@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string_view>
+#include <array>
 
 namespace hrs
 {
@@ -41,7 +42,17 @@ namespace hrs
 
 	template<typename E> \
 		requires std::is_enum_v<E>
-	struct enum_meta {};
+	struct enum_meta
+	{
+		constexpr static std::array<std::pair<E, std::string_view>, 0> pairs = {};
+		constexpr static std::size_t count = 0;
+		using underlying = std::underlying_type_t<E>;
+
+		constexpr static std::string_view get_name(E value) noexcept
+		{
+			return "";
+		}
+	};
 };
 
 #define HRS_TOKENIZE(...) \

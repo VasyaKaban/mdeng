@@ -1,83 +1,73 @@
 #pragma once
 
-#include "hrs/expected.hpp"
+#include <span>
+#include <string>
 #include "hrs/non_creatable.hpp"
-#include "WindowSubSystemConfig.h"
-#include "HandlerContainer.hpp"
+#include "hrs/expected.hpp"
+#include <SDL2/SDL_video.h>
+#include <SDL2/SDL_syswm.h>
+#include <SDL2/SDL_system.h>
+#include "EventHandlers.h"
+
+#define VK_NO_PROTOTYPES
+#include <vulkan/vulkan.h>
 
 namespace View
 {
-	class Window : public hrs::non_copyable
+	class WindowSubSystem;
+
+	class Window
 	{
+	private:
+		friend class WindowSubSystem;
+
+		Window(WindowSubSystem *_parent_sub_system,
+			   SDL_Window *_handle) noexcept;
+
 	public:
-
-		struct Resolution
-		{
-			int width;
-			int height;
-		};
-
-		struct Position
-		{
-			int x;
-			int y;
-		};
-
 		Window() noexcept;
-		Window(WindowHandle _handle) noexcept;
 		~Window();
 		Window(Window &&w) noexcept;
 		Window & operator=(Window &&w) noexcept;
 
+		void Destroy() noexcept;
+
 		bool IsCreated() const noexcept;
 		explicit operator bool() const noexcept;
 
-		void Destroy() noexcept;
-		void Resize(const Resolution &resolution) noexcept;
+		std::span<const char *> EnumerateVulkanExtensions() const;
+		const char * GetVulkanSurfaceCreateFunctionName() const noexcept;
+
+		hrs::expected<VkSurfaceKHR, VkResult>
+		CreateSurface(PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr,
+					  VkInstance instance,
+					  const VkAllocationCallbacks *allocation_callbacks) const noexcept;
+
+		std::pair<unsigned int, unsigned int> GetResolution() const noexcept;
+		void SetResolution(unsigned int width, unsigned int height) noexcept;
+
+		std::string GetTitle() const;
 		void SetTitle(const char *title) noexcept;
-		void SetBorderState(bool bordered) noexcept;
-		void SetResizableState(bool resizable) noexcept;
-		void SetPosition(const Position &position) noexcept;
-		Resolution GetResolution() const noexcept;
-		Resolution GetVulkanSurfaceResolution() const noexcept;
 
-		hrs::expected<std::vector<const char *>, Error> GetVulkanInstanceExtensions() const noexcept;
-		hrs::expected<VkSurfaceKHR, Error> CreateVulkanSurface(VkInstance instance) const noexcept;
+		void WarpMouse(int x, int y) noexcept;
 
-		void HandleEvent(const SDL_Event &event) const noexcept;
-		void HandleEvent(const SDL_WindowEvent &event) const noexcept;
-		void HandleEvent(const SDL_KeyboardEvent &event) const noexcept;
-		void HandleEvent(const SDL_MouseMotionEvent &event) const noexcept;
-		void HandleEvent(const SDL_MouseButtonEvent &event) const noexcept;
-		void HandleEvent(const SDL_MouseWheelEvent &event) const noexcept;
-		void HandleEvent(const SDL_QuitEvent &event) const noexcept;
-		void HandleEvent(const SDL_UserEvent &event) const noexcept;
+		void SetFullscreenState(Uint32 flags) noexcept;
 
-		WindowEventHandlerContainer & GetWindowEventHandlers() noexcept;
-		KeyboardEventHandlerContainer & GetKeyboardEventHandlers() noexcept;
-		MouseMotionEventHandlerContainer & GetMouseMotionEventHandlers() noexcept;
-		MouseButtonEventHandlerContainer & GetMouseButtonEventHandlers() noexcept;
-		MouseWheelEventHandlerContainer & GetMouseWheelEventHandlers() noexcept;
-		QuitEventHandlerContainer & GetQuitEventHandlers() noexcept;
-		UserEventHandlerContainer & GetUserEventHandlers() noexcept;
+		hrs::expected<SDL_SysWMinfo, const char *> GetWindowManagerInfo() const noexcept;
 
-		const WindowEventHandlerContainer & GetWindowEventHandlers() const noexcept;
-		const KeyboardEventHandlerContainer & GetKeyboardEventHandlers() const noexcept;
-		const MouseMotionEventHandlerContainer & GetMouseMotionEventHandlers() const noexcept;
-		const MouseButtonEventHandlerContainer & GetMouseButtonEventHandlers() const noexcept;
-		const MouseWheelEventHandlerContainer & GetMouseWheelEventHandlers() const noexcept;
-		const QuitEventHandlerContainer & GetQuitEventHandlers() const noexcept;
-		const UserEventHandlerContainer & GetUserEventHandlers() const noexcept;
+		EventHandlers & GetEventHandlers() noexcept;
+		const EventHandlers & GetEventHandlers() const noexcept;
+
+		WindowSubSystem * GetParentSubSystem() noexcept;
+		const WindowSubSystem * GetParentSubSystem() const noexcept;
+
+		Uint32 GetID() const noexcept;
 
 	private:
-		WindowHandle handle;
-
-		WindowEventHandlerContainer window_event_handlers;
-		KeyboardEventHandlerContainer keyboard_event_handlers;
-		MouseMotionEventHandlerContainer mouse_motion_event_handlers;
-		MouseButtonEventHandlerContainer mouse_button_event_handlers;
-		MouseWheelEventHandlerContainer mouse_wheel_event_handlers;
-		QuitEventHandlerContainer quit_event_handlers;
-		UserEventHandlerContainer user_event_handlers;
+		const char * get_vulkan_surface_create_function_name(SDL_SYSWM_TYPE type) const noexcept;
+	private:
+		WindowSubSystem *parent_sub_system;
+		SDL_Window *handle;
+		EventHandlers event_handlers;
 	};
 };

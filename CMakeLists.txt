@@ -24,9 +24,12 @@ add_executable(${PROJECT_NAME} src/main.cpp)
 
 #add_dependencies(${PROJECT_NAME} generated_loader)
 
+set(CMAKE_CXX_FLAGS_DEBUG "-rdynamic")
+
 target_link_libraries(${PROJECT_NAME}
 	                    PRIVATE Hrs
-						PRIVATE Renderer
-						PRIVATE GeometryParser
-						PRIVATE WindowSubSystem)
+						#PRIVATE Renderer
+						#PRIVATE GeometryParser
+						PRIVATE WindowSubSystem
+					)
 

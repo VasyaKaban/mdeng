@@ -1,46 +1,13 @@
 #pragma once
 
-#include "mem_req.hpp"
-#include "instantiation.hpp"
+#include <concepts>
+#include <utility>
 
 namespace hrs
 {
-	template<typename U>
-	constexpr U * start_lifetime_from_bytes(std::byte *ptr) noexcept
-	{
-		return std::launder(reinterpret_cast<U *>(ptr));
-	}
+	struct unexpected_t {};
 
-	template<typename U>
-	constexpr const U * start_lifetime_from_bytes(const std::byte *ptr) noexcept
-	{
-		return std::launder(reinterpret_cast<const U *>(ptr));
-	}
-
-	template<typename E>
-	struct unexpected
-	{
-		E error;
-
-		unexpected() requires std::is_default_constructible_v<E> = default;
-		~unexpected() = default;
-		constexpr unexpected(const unexpected &un) noexcept(std::is_nothrow_copy_constructible_v<E>)
-			: error(un.error) {}
-		constexpr unexpected(unexpected &&un) noexcept(std::is_nothrow_move_constructible_v<E>)
-			: error(std::move(un.error)) {}
-
-		constexpr unexpected & operator=(const E &err) noexcept(std::is_nothrow_copy_assignable_v<E>)
-		{
-			error = err;
-			return *this;
-		}
-
-		constexpr unexpected & operator=(E &&err) noexcept(std::is_nothrow_move_assignable_v<E>)
-		{
-			error = std::move(err);
-			return *this;
-		}
-	};
+	constexpr inline unexpected_t unexpected;
 
 	template<typename T, typename E>
 	class expected
@@ -50,122 +17,103 @@ namespace hrs
 		using value_type = T;
 		using error_type = E;
 
-		constexpr inline static size_t DATA_SIZE = union_size_alignment<T, E>().size;
-		constexpr inline static size_t DATA_ALIGNMENT = union_size_alignment<T, E>().alignment;
-
 		constexpr expected() noexcept(std::is_nothrow_default_constructible_v<T>)
 			requires std::is_default_constructible_v<T>
-		{
-			is_error = false;
-			new(union_block) T{};
-		}
+			: is_error(false) {}
 
 		template<typename U = T>
-			requires std::constructible_from<T, U>
-		constexpr expected(U &&val) noexcept(std::is_nothrow_constructible_v<T, U>)
+			requires std::assignable_from<T &, U>
+		constexpr expected(U &&val) noexcept(std::is_nothrow_assignable_v<T &, U>)
 		{
 			is_error = false;
-			new(union_block) T(std::forward<U>(val));
+			data.value = std::forward<U>(val);
 		}
 
 		template<typename U = E>
-			requires std::constructible_from<E, U> && (!std::constructible_from<T, U>)
-		constexpr expected(U &&err) noexcept(std::is_nothrow_constructible_v<E, U>)
+			requires std::assignable_from<E &, U> && (!std::assignable_from<T &, U>)
+		constexpr expected(U &&err) noexcept(std::is_nothrow_assignable_v<E &, U>)
 		{
 			is_error = true;
-			new(union_block) E(std::forward<U>(err));
+			data.error = std::forward<U>(err);
 		}
 
-		constexpr expected(const unexpected<E> &unex) noexcept(std::is_nothrow_copy_constructible_v<E>)
-			requires std::is_copy_constructible_v<E>
+		template<typename U = E>
+			requires std::assignable_from<E &, U>
+		constexpr expected(unexpected_t _, U &&err) noexcept(std::is_nothrow_assignable_v<E &, U>)
 		{
 			is_error = true;
-			new(union_block) E{unex.error};
-		}
-
-		constexpr expected(unexpected<E> &&unex) noexcept(std::is_nothrow_move_constructible_v<E>)
-			requires std::is_move_constructible_v<E>
-		{
-			is_error = true;
-			new(union_block) E{std::move(unex.error)};
+			data.error = std::forward<U>(err);
 		}
 
 		constexpr ~expected()
 		{
 			if(is_error)
-				start_lifetime_from_bytes<E>(union_block)->~E();
+				data.error.~E();
 			else
-				start_lifetime_from_bytes<T>(union_block)->~T();
+				data.value.~T();
 		}
 
-		constexpr expected(const expected &ex) noexcept(std::is_nothrow_copy_constructible_v<T> &&
-														std::is_nothrow_copy_constructible_v<E>)
+		constexpr expected(const expected &ex) noexcept(std::is_nothrow_copy_assignable_v<T> &&
+														std::is_nothrow_copy_assignable_v<E>)
 		{
 			if(ex.is_error)
-				*this = ex.error();
+				*this = ex.data.error;
 			else
-				*this = ex.value();
-
-			is_error = ex.is_error;
+				*this = ex.data.value;
 		}
 
-		constexpr expected(expected &&ex) noexcept(std::is_nothrow_move_constructible_v<T> &&
-												   std::is_nothrow_move_constructible_v<E>)
+		constexpr expected(expected &&ex) noexcept(std::is_nothrow_move_assignable_v<T> &&
+												   std::is_nothrow_move_assignable_v<E>)
 		{
 			if(ex.is_error)
-				*this = std::move(ex.error());
+				*this = std::move(ex).data.error;
 			else
-				*this = std::move(ex.value());
-
-			//ex = expected{};
+				*this = std::move(ex).data.value;
 		}
 
-		constexpr expected & operator=(const expected &ex) noexcept(std::is_nothrow_copy_constructible_v<T> &&
-																	std::is_nothrow_copy_constructible_v<E>)
+		constexpr expected & operator=(const expected &ex) noexcept(std::is_nothrow_copy_assignable_v<T> &&
+																	std::is_nothrow_copy_assignable_v<E>)
 		{
 			this->~expected();
 
 			if(ex.is_error)
-				*this = ex.error();
+				*this = ex.data.error;
 			else
-				*this = ex.value();
-			is_error = ex.is_error;
+				*this = ex.data.value;
 
 			return *this;
 		}
 
-		constexpr expected & operator=(expected &&ex) noexcept(std::is_nothrow_move_constructible_v<T> &&
-															   std::is_nothrow_move_constructible_v<E>)
+		constexpr expected & operator=(expected &&ex) noexcept(std::is_nothrow_move_assignable_v<T> &&
+															   std::is_nothrow_move_assignable_v<E>)
 		{
 			this->~expected();
 
 			if(ex.is_error)
-				*this = std::move(ex.error());
+				*this = std::move(ex).data.error;
 			else
-				*this = std::move(ex.value());
-
-			//ex = expected{};
+				*this = std::move(ex).data.value;
 
 			return *this;
 		}
 
 		template<typename U = T>
-			requires std::constructible_from<T, U>
-		constexpr expected & operator=(U &&value) noexcept(std::is_nothrow_constructible_v<T, U>)
+			requires std::assignable_from<T &, U>
+		constexpr expected & operator=(U &&value) noexcept(std::is_nothrow_assignable_v<T &, U>)
 		{
 			this->~expected();
 			is_error = false;
-			new(union_block) T(std::forward<U>(value));
+			data.value = std::forward<U>(value);
 			return *this;
 		}
 
 		template<typename U = E>
-			requires std::constructible_from<E, U> && (!std::constructible_from<T, U>)
-		constexpr expected & operator=(U &&error) noexcept(std::is_nothrow_constructible_v<E, U>)
+			requires std::assignable_from<E &, U> && (!std::assignable_from<T &, U>)
+		constexpr expected & operator=(U &&error) noexcept(std::is_nothrow_assignable_v<E &, U>)
 		{
 			this->~expected();
 			is_error = true;
-			new(union_block) E(std::forward<U>(error));
+			data.error = std::forward<U>(error);
 			return *this;
 		}
 
@@ -176,42 +124,42 @@ namespace hrs
 
 		constexpr E & error() & noexcept
 		{
-			return *start_lifetime_from_bytes<E>(union_block);
+			return data.error;
 		}
 
 		constexpr const E & error() const & noexcept
 		{
-			return *start_lifetime_from_bytes<E>(union_block);
+			return data.error;
 		}
 
 		constexpr E && error() && noexcept
 		{
-			return std::move(*start_lifetime_from_bytes<E>(union_block));
+			return std::move(data.error);
 		}
 
 		constexpr const E && error() const && noexcept
 		{
-			return std::move(*start_lifetime_from_bytes<E>(union_block));
+			return std::move(data.error);
 		}
 
 		constexpr T & value() & noexcept
 		{
-			return *start_lifetime_from_bytes<T>(union_block);
+			return data.value;
 		}
 
 		constexpr const T & value() const & noexcept
 		{
-			return *start_lifetime_from_bytes<T>(union_block);
+			return data.value;
 		}
 
 		constexpr T && value() && noexcept
 		{
-			return std::move(*start_lifetime_from_bytes<T>(union_block));
+			return std::move(data.value);
 		}
 
 		constexpr const T && value() const && noexcept
 		{
-			return std::move(*start_lifetime_from_bytes<T>(union_block));
+			return std::move(data.value);
 		}
 
 		constexpr bool has_value() const noexcept
@@ -221,41 +169,222 @@ namespace hrs
 
 		constexpr T * operator->() noexcept
 		{
-			return start_lifetime_from_bytes<T>(union_block);
+			return &value();
 		}
 
 		constexpr const T * operator->() const noexcept
 		{
-			return start_lifetime_from_bytes<T>(union_block);
+			return &value();
 		}
 
 		constexpr T & operator*() & noexcept
 		{
-			return *start_lifetime_from_bytes<T>(union_block);
+			return value();
 		}
 
 		constexpr const T & operator*() const & noexcept
 		{
-			return *start_lifetime_from_bytes<T>(union_block);
+			return value();
 		}
 
 		constexpr T && operator*() && noexcept
 		{
-			return std::move(*start_lifetime_from_bytes<T>(union_block));
+			return value();
 		}
 
 		constexpr const T && operator*() const && noexcept
 		{
-			return std::move(*start_lifetime_from_bytes<T>(union_block));
+			return value();
 		}
 
+		template<typename U>
+		constexpr T value_or(U &&other) const & noexcept(std::is_nothrow_convertible_v<U, T>)
+		{
+			if(has_value())
+				return **this;
+
+			return std::forward<U>(other);
+		}
+
+		template<typename U>
+		constexpr T value_or(U &&other) const && noexcept(std::is_nothrow_convertible_v<U, T>)
+		{
+			if(has_value())
+				return **this;
+
+			return std::forward<U>(other);
+		}
+
+		template<typename F>
+		constexpr hrs::expected<T, E> and_then(F &&func) &
+		{
+			if(has_value())
+				return std::forward<F>(func)(**this);
+			else
+				return error();
+		}
+
+		template<typename F>
+		constexpr hrs::expected<T, E> and_then(F &&func) const &
+		{
+			if(has_value())
+				return std::forward<F>(func)(**this);
+			else
+				return error();
+		}
+
+		template<typename F>
+		constexpr hrs::expected<T, E> and_then(F &&func) &&
+		{
+			if(has_value())
+				return std::forward<F>(func)(std::move(**this));
+			else
+				return error();
+		}
+
+		template<typename F>
+		constexpr hrs::expected<T, E> and_then(F &&func) const &&
+		{
+			if(has_value())
+				return std::forward<F>(func)(std::move(**this));
+			else
+				return error();
+		}
+
+		template<typename F>
+		constexpr hrs::expected<T, E> or_else(F &&func) &
+		{
+			if(!has_value())
+				return std::forward<F>(func)(error());
+			else
+				return value();
+		}
+
+		template<typename F>
+		constexpr hrs::expected<T, E> or_else(F &&func) const &
+		{
+			if(!has_value())
+				return std::forward<F>(func)(error());
+			else
+				return value();
+		}
+
+		template<typename F>
+		constexpr hrs::expected<T, E> or_else(F &&func) &&
+		{
+			if(!has_value())
+				return std::forward<F>(func)(std::move(error()));
+			else
+				return value();
+		}
+
+		template<typename F>
+		constexpr hrs::expected<T, E> or_else(F &&func) const &&
+		{
+			if(!has_value())
+				return std::forward<F>(func)(std::move(error()));
+			else
+				return value();
+		}
+
+
 	private:
-		alignas(DATA_ALIGNMENT) std::byte union_block[DATA_SIZE];
+		union expected_data
+		{
+			T value;
+			E error;
+
+			constexpr expected_data() noexcept(std::is_nothrow_default_constructible_v<T>)
+				requires std::is_default_constructible_v<T>
+				: value() {}
+
+			constexpr ~expected_data() {}
+		} data;
 		bool is_error;
 	};
 }
 
+namespace hrs
+{
+	template<typename T>
+		requires std::is_move_assignable_v<T> || std::is_copy_assignable_v<T>
+	void move_if_possible(T &out, T &val) noexcept(std::is_nothrow_move_assignable_v<T> ||
+												   std::is_nothrow_copy_assignable_v<T>)
+	{
+		if constexpr(std::is_move_assignable_v<T>)
+			out = std::move(val);
+		else
+			out = val;
+	}
+};
 
+#define HRS_PROPAGATE_EXP(val, op) \
+	static_assert(std::is_default_constructible_v<std::remove_reference_t<decltype(*op)>>); \
+	std::remove_reference_t<decltype(*op)> val; \
+	{ \
+		auto exp = op; \
+		if(!exp) \
+			return exp.error(); \
+		else \
+			hrs::move_if_possible(val, *exp); \
+	}
 
+#include <string>
 
+auto foo(bool b) -> hrs::expected<std::string, int>
+{
+	if(b)
+		return 1;
 
+	return "hello!";
+}
+
+auto bar() -> hrs::expected<std::string, float>
+{
+	HRS_PROPAGATE_EXP(val_get, foo(true))
+	return val_get;
+}
+
+auto first_foo(std::string val) -> hrs::expected<std::string, int>
+{
+	std::string str(std::move(val));
+	return str.append("amogus");
+}
+
+auto second_foo(std::string val) -> hrs::expected<std::string, int>
+{
+	if(val.empty())
+		return 1;
+
+	std::string str(std::move(val));
+
+	//return {hrs::unexpected, 1};
+
+	return str.append("abobus");
+}
+
+auto func()
+{
+	auto res = foo(true)
+				   .and_then
+			   ([](std::string val)
+				{
+					std::string str(std::move(val));
+					return str.append("amogus");
+				})
+				   .and_then
+			   ([](std::string val) -> hrs::expected<std::string, int>
+				{
+					if(val.empty())
+						return 1;
+
+					std::string str(std::move(val));
+					return str.append("abobus");
+				})
+				   .or_else
+			   ([](int err)
+				{
+					return "Hello!";
+				})
+				   .value_or("");
+}

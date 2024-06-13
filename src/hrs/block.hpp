@@ -6,8 +6,6 @@
 
 #pragma once
 
-#include <vulkan/vulkan.h>
-
 #include <concepts>
 
 namespace hrs

@@ -11,6 +11,7 @@
 #include <format>
 #include <iostream>
 #include <source_location>
+#include "stacktrace.hpp"
 
 namespace hrs
 {
@@ -47,19 +48,30 @@ namespace hrs
 		 * @param args arguments for format string
 		 * @param loc source location where assert_true was called
 		 */
-		constexpr assert_true(bool condition,
-							  std::format_string<Args...> fmt,
-							  Args &&...args,
-							  const std::source_location &loc = std::source_location::current())
+		assert_true(bool condition,
+					std::format_string<Args...> fmt,
+					Args &&...args,
+					const std::source_location &loc = std::source_location::current()) noexcept
 		{
 			if(!condition)
 			{
-				std::cerr<<std::format("ASSERTION FAILED!\nFile: {}\nFunction: {}\nLine-column: {}:{}\n",
-										 loc.file_name(),
-										 loc.function_name(),
-										 loc.line(),
-										 loc.column());
-				std::cerr<<"MESSAGE: "<<std::format(fmt, std::forward<Args>(args)...)<<"\n";
+				try
+				{
+					std::cerr<<
+						std::format("ASSERTION FAILED!\nFile: {}\nFunction: {}\nLine:column: {}:{}\n",
+									loc.file_name(),
+									loc.function_name(),
+									loc.line(),
+									loc.column());
+					std::cerr<<"Message: "<<std::format(fmt, std::forward<Args>(args)...)<<"\n";
+					const stacktrace stack_trace(32, 0);
+					std::cerr<<"Stacktrace:\n";
+					std::cerr<<stack_trace;
+				}
+				catch(...)
+				{
+
+				}
 				abort();
 			}
 		}
@@ -83,22 +95,13 @@ namespace hrs
 		 * @param args arguments for format string
 		 * @param loc source location where assert_true was called
 		 */
-		constexpr assert_true_debug(bool condition,
-									std::format_string<Args...> fmt,
-									Args &&...args,
-									const std::source_location &loc = std::source_location::current())
+		 assert_true_debug(bool condition,
+						   std::format_string<Args...> fmt,
+						   Args &&...args,
+						   const std::source_location &loc = std::source_location::current()) noexcept
 		{
 		#ifndef NDEBUG
-			if(!condition)
-			{
-				std::cerr<<std::format("ASSERTION FAILED!\nFile: {}\nFunction: {}\nLine-column: {}:{}\n",
-										 loc.file_name(),
-										 loc.function_name(),
-										 loc.line(),
-										 loc.column());
-				std::cerr<<"MESSAGE: "<<std::format(fmt, std::forward<Args>(args)...)<<"\n";
-				abort();
-			}
+			assert_true(condition, fmt, std::forward<Args>(args)..., loc);
 		#endif
 		}
 	};

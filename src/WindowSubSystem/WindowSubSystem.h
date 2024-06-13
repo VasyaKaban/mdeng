@@ -1,65 +1,47 @@
 #pragma once
 
 #include <optional>
-#include <unordered_map>
-#include <vector>
+#include <map>
 #include "hrs/non_creatable.hpp"
 #include "hrs/expected.hpp"
-#include "WindowSubSystemConfig.h"
+#include <SDL2/SDL_stdinc.h>
 
 namespace View
 {
 	class Window;
 
-	class WindowSubSystem
-		: public hrs::non_copyable,
-		  public hrs::non_movable
+	class WindowSubSystem : public hrs::non_copyable
 	{
-	private:
-		WindowSubSystem() = default;
 	public:
+		WindowSubSystem() noexcept;
+		~WindowSubSystem() noexcept;
+		WindowSubSystem(WindowSubSystem &&wss) noexcept;
+		WindowSubSystem & operator=(WindowSubSystem &&wss) noexcept;
 
-		~WindowSubSystem();
+		bool IsCreated() const noexcept;
+		explicit operator bool() const noexcept;
 
-		static hrs::expected<WindowSubSystem *, Error> Init() noexcept;
-
-		bool IsInitialized() noexcept;
-		void Close() noexcept;
-
-		hrs::expected<Window *, Error> CreateWindow(
-			const char *title,
-			int x_position,
-			int y_position,
-			int width,
-			int height,
-			CreateFlags flags);
+		std::optional<const char *> Init() noexcept;
+		void Destroy() noexcept;
 
 		void PollEvents() noexcept;
 
-		std::optional<Error> PeepEvents(int count,
-										Event min_type,
-										Event max_type,
-										bool remove);
+		hrs::expected<Window *, const char *> CreateWindow(const char *title,
+														   unsigned int width, unsigned int height,
+														   int x, int y,
+														   Uint32 flags);
 
-		std::optional<Error> PeepEvents(int count,
-										std::vector<SDL_Event> &event_storage,
-										Event min_type,
-										Event max_type,
-										bool remove);
+		void DropWindow(Window *w) noexcept;
+		void DropWindow(Uint32 window_id) noexcept;
 
-		void PumpEvents() noexcept;
-
-		void CallWindowHandlers(const SDL_Event &event) noexcept;
-
-		Window * GetWindowByHandle(WindowHandle handle) noexcept;
-
-		Window * GetWindowByID(WindowID id) noexcept;
+		const char * GetError() const noexcept;
 
 	private:
-		static WindowSubSystem sub_system;
-
-		static inline auto SUBSYSTEMS_FLAGS = SDL_INIT_EVENTS | SDL_INIT_VIDEO;
+		Window * find_window(Uint32 window_id) noexcept;
 	private:
-		std::unordered_map<WindowHandle, Window> windows;
+		inline static int counter;
+
+		bool created;
+		std::map<Uint32, Window> windows;
 	};
 };

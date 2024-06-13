@@ -3,10 +3,39 @@ cmake_minimum_required(VERSION 3.28)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(VULKAN_FOLDER_SOURCES
-	Vulkan/VulkanInclude.hpp
-	Vulkan/VulkanUtils.hpp
-	Vulkan/VulkanFormatUtils.hpp)
+add_library(Renderer STATIC)
+
+target_sources(
+	Renderer
+	    PRIVATE
+		Vulkan/VulkanInclude.h
+		Vulkan/VulkanLibrary.h
+		Vulkan/VulkanLibrary.cpp
+		Vulkan/VulkanLoaderGenBegin.h
+		Vulkan/VulkanLoaderGenEnd.h
+)
+
+target_sources(
+	Renderer
+	    PRIVATE
+		Context/Context.h
+		Context/Context.cpp
+		Context/ContextDestructors.h
+		Context/ContextDestructors.cpp
+		Context/GlobalLoader.h
+		Context/GlobalLoader.cpp
+		Context/Instance.h
+		Context/Instance.cpp
+		Context/InstanceLoader.h
+		Context/InstanceLoader.cpp
+		Context/Device.h
+		Context/Device.cpp
+		Context/DeviceLoader.h
+		Context/DeviceLoader.cpp
+		Context/InstanceSurfaceStorage.h
+		Context/InstanceSurfaceStorage.cpp
+)
+
 
 set(ALLOCATOR_FOLDER_SOURCES
 	Allocator/Memory.h
@@ -21,17 +50,6 @@ set(ALLOCATOR_FOLDER_SOURCES
 	Allocator/Allocator.cpp
 	Allocator/AllocateFromMany.hpp
 	Allocator/BoundedResourceSize.hpp)
-
-set(CONTEXT_FOLDER_SOURCES
-	Context/Context.h
-	Context/Context.cpp
-	Context/DeviceWorker.h
-	Context/PhysicalDevice.h
-	Context/PhysicalDevice.cpp
-	Context/Device.h
-	Context/Device.cpp
-	Context/Surface.h
-	Context/Surface.cpp)
 
 set(TRANSFER_CHANNEL_FOLDER_SOURCES
 	TransferChannel/TransferChannel.h
@@ -89,23 +107,6 @@ set(SWAPCHAIN_FOLDER_SOURCES
 	Swapchain/Swapchain.h
 	Swapchain/Swapchain.cpp)
 
-add_library(
-	Renderer STATIC
-		${VULKAN_FOLDER_SOURCES}
-		${ALLOCATOR_FOLDER_SOURCES}
-		${CONTEXT_FOLDER_SOURCES}
-		${TRANSFER_CHANNEL_FOLDER_SOURCES}
-		${WORLD_FOLDER_SOURCES}
-		${DESCRIPTOR_STORAGE_FOLDER_SOURCES}
-		${DATA_INDEX_STORAGE_FOLDER_SOURCES}
-		${DATA_BUFFER_FOLDER_SOURCES}
-		${SWAPCHAIN_FOLDER_SOURCES}
-	)
-
-find_package(Vulkan REQUIRED)
-
 link_directories(../hrs)
-target_link_libraries(Renderer
-	                    PRIVATE Hrs
-						PRIVATE ${Vulkan_LIBRARIES})
+target_link_libraries(Renderer PRIVATE Hrs)
 target_include_directories(Renderer PUBLIC ../)
