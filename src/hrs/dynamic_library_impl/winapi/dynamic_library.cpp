@@ -54,7 +54,12 @@ namespace hrs
 			return is_open();
 		}
 
-		void * dynamic_library::get_raw(const char *name) const noexcept
+		bool dynamic_library::operator==(const dynamic_library &dl) const noexcept
+		{
+			return handle == dl.handle;
+		}
+
+		void * dynamic_library::get_raw_ptr(const char *name) const noexcept
 		{
 			if(!is_open())
 				return nullptr;

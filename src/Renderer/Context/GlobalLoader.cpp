@@ -1,39 +1,23 @@
 #include "GlobalLoader.h"
-#include "../Vulkan/VulkanLibrary.h"
+#include "../Vulkan/VulkanLoaderGenBegin.h"
 
 namespace FireLand
 {
-	GlobalLoader::GlobalLoader() noexcept
-		: vkGetInstanceProcAddr(nullptr),
-		  vkCreateInstance(nullptr),
-		  vkEnumerateInstanceExtensionProperties(nullptr),
-		  vkEnumerateInstanceLayerProperties(nullptr)
-#ifdef VK_VERSION_1_1
-		 ,vkEnumerateInstanceVersion(nullptr) {}
-#endif
-
-	bool GlobalLoader::Init(const VulkanLibrary &lib) noexcept
+	bool GlobalLoader::Init(PFN_vkGetInstanceProcAddr global_vkGetInstanceProcAddr) noexcept
 	{
-		vkGetInstanceProcAddr
-			= reinterpret_cast<PFN_vkGetInstanceProcAddr>(lib.GetProcAddress("vkGetInstanceProcAddr"));
-
-		if(!vkGetInstanceProcAddr)
+		GetInstanceProcAddr = global_vkGetInstanceProcAddr;
+		if(!GetInstanceProcAddr)
 			return false;
 
-		vkCreateInstance =
-			reinterpret_cast<PFN_vkCreateInstance>(vkGetInstanceProcAddr(VK_NULL_HANDLE, "vkCreateInstace"));
+		FIRE_LAND_RESOLVE_VK_FUNCTION_COND(GetInstanceProcAddr, VK_NULL_HANDLE, CreateInstance, false)
 
-		vkEnumerateInstanceExtensionProperties =
-			reinterpret_cast<PFN_vkEnumerateInstanceExtensionProperties>(vkGetInstanceProcAddr(VK_NULL_HANDLE, "vkEnumerateInstanceExtensionProperties"));
-
-		vkEnumerateInstanceLayerProperties =
-			reinterpret_cast<PFN_vkEnumerateInstanceLayerProperties>(vkGetInstanceProcAddr(VK_NULL_HANDLE, "vkEnumerateInstanceLayerProperties"));
-
-#ifdef VK_VERSION_1_1
-		vkEnumerateInstanceVersion =
-			reinterpret_cast<PFN_vkEnumerateInstanceVersion>(vkGetInstanceProcAddr(VK_NULL_HANDLE, "vkEnumerateInstanceVersion"));
-#endif
+		FIRE_LAND_RESOLVE_VK_FUNCTION(GetInstanceProcAddr, VK_NULL_HANDLE, EnumerateInstanceExtensionProperties)
+		FIRE_LAND_RESOLVE_VK_FUNCTION(GetInstanceProcAddr, VK_NULL_HANDLE, EnumerateInstanceLayerProperties)
+		FIRE_LAND_RESOLVE_VK_FUNCTION(GetInstanceProcAddr, VK_NULL_HANDLE, EnumerateInstanceVersion)
 
 		return true;
 	}
 };
+
+#include "../Vulkan/VulkanLoaderGenEnd.h"
+

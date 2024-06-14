@@ -1,49 +1,64 @@
 #pragma once
 
-#include <vector>
 #include <memory>
-#include <optional>
+#include <vector>
 #include "hrs/non_creatable.hpp"
 #include "DeviceLoader.h"
+#include "DeviceWorker.h"
 
 namespace FireLand
 {
-	class Instance;
-	class DeviceWorker;
+	class Context;
 
 	class Device : public hrs::non_copyable
 	{
 	public:
 		Device() noexcept;
-		virtual ~Device();
+		~Device();
 		Device(Device &&dev) noexcept;
 		Device & operator=(Device &&dev) noexcept;
 
-		VkResult Init(Instance *_parent_instance,
-					  VkPhysicalDevice physical_device,
-					  const VkDeviceCreateInfo &info,
-					  const VkAllocationCallbacks *_allocation_callbacks) noexcept;
+		VkResult Init(Context *_parent_context,
+					  VkDevice _handle,
+					  VkPhysicalDevice _physical_device,
+					  std::shared_ptr<VkAllocationCallbacks> _allocation_cbacks) noexcept;
 
-		virtual void Destroy() noexcept;
+		void Destroy() noexcept;
 
-		virtual bool IsCreated() const noexcept;
-		virtual explicit operator bool() const noexcept;
+		void AddDeviceWorker(DeviceWorker *worker);
+		void DropDeviceWorker(DeviceWorker *worker) noexcept;
+		DeviceWorker * ReleaseDeviceWorker(DeviceWorker *worker) noexcept;
 
-		void AddDeviceWorker(DeviceWorker *dev_worker);
-		void DeleteDeviceWorker(DeviceWorker *dev_worker) noexcept;
-		bool HasDeviceWorker(DeviceWorker *dev_worker) const noexcept;
+		bool IsCreated() const noexcept;
+		explicit operator bool() const noexcept;
 
-		Instance * GetParentInstance() noexcept;
-		const Instance * GetParentInstance() const noexcept;
+		bool operator==(const Device &device) const noexcept;
+
+		PFN_vkVoidFunction GetProcAddressRaw(const char *name) const noexcept;
+
+		const DeviceLoader & GetLoader() const noexcept;
+		Context * GetParentContext() noexcept;
+		const Context * GetParentContext() const noexcept;
 		VkDevice GetHandle() const noexcept;
-		const DeviceLoader & GetDeviceLoader() const noexcept;
-		const VkAllocationCallbacks * GetAllocationCallbacks() const noexcept;
+		VkPhysicalDevice GetPhysicalDevice() const noexcept;
+		std::vector<std::unique_ptr<DeviceWorker>> & GetDeviceWorkers() noexcept;
+		const std::vector<std::unique_ptr<DeviceWorker>> & GetDeviceWorkers() const noexcept;
 
-	protected:
-		Instance *parent_instance;
+		template<typename P>
+			requires std::is_pointer_v<P> && std::is_function_v<std::remove_pointer_t<P>>
+		P GetProcAddress(const char * const name) const noexcept
+		{
+			return reinterpret_cast<P>(GetProcAddressRaw(name));
+		}
+
+	private:
+		std::vector<std::unique_ptr<DeviceWorker>>::iterator find_worker(DeviceWorker *worker) noexcept;
+	private:
+		Context *parent_context;
 		VkDevice handle;
-		DeviceLoader device_loader;
-		std::optional<VkAllocationCallbacks> allocation_callbacks;
-		std::vector<std::unique_ptr<DeviceWorker>> device_workers;
+		VkPhysicalDevice physical_device;
+		std::shared_ptr<VkAllocationCallbacks> allocation_cbacks;
+		DeviceLoader loader;
+		std::vector<std::unique_ptr<DeviceWorker>> workers;
 	};
 };

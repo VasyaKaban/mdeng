@@ -22,6 +22,8 @@ namespace hrs
 			bool is_open() const noexcept;
 			explicit operator bool() const noexcept;
 
+			bool operator==(const dynamic_library &dl) const noexcept;
+
 			void * get_raw_ptr(const char *name) const noexcept;
 
 			template<typename P = void *>

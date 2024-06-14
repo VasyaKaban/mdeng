@@ -66,7 +66,11 @@ namespace hrs
 					std::cerr<<"Message: "<<std::format(fmt, std::forward<Args>(args)...)<<"\n";
 					const stacktrace stack_trace(32, 0);
 					std::cerr<<"Stacktrace:\n";
-					std::cerr<<stack_trace;
+					for(std::size_t i = 0; i < stack_trace.size(); i++)
+						std::cerr<<
+							"#"<<i<<": "<<
+							stack_trace[i].object_path()<<":"<<
+							stack_trace[i].function_name()<<"\n";
 				}
 				catch(...)
 				{

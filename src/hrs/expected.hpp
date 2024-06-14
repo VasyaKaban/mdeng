@@ -294,97 +294,11 @@ namespace hrs
 			T value;
 			E error;
 
-			constexpr expected_data() noexcept(std::is_nothrow_default_constructible_v<T>)
-				requires std::is_default_constructible_v<T>
-				: value() {}
+			constexpr expected_data() noexcept/*(std::is_nothrow_default_constructible_v<T>)*/
+				/*requires std::is_default_constructible_v<T>*/ {}
 
 			constexpr ~expected_data() {}
 		} data;
 		bool is_error;
 	};
-}
-
-namespace hrs
-{
-	template<typename T>
-		requires std::is_move_assignable_v<T> || std::is_copy_assignable_v<T>
-	void move_if_possible(T &out, T &val) noexcept(std::is_nothrow_move_assignable_v<T> ||
-												   std::is_nothrow_copy_assignable_v<T>)
-	{
-		if constexpr(std::is_move_assignable_v<T>)
-			out = std::move(val);
-		else
-			out = val;
-	}
-};
-
-#define HRS_PROPAGATE_EXP(val, op) \
-	static_assert(std::is_default_constructible_v<std::remove_reference_t<decltype(*op)>>); \
-	std::remove_reference_t<decltype(*op)> val; \
-	{ \
-		auto exp = op; \
-		if(!exp) \
-			return exp.error(); \
-		else \
-			hrs::move_if_possible(val, *exp); \
-	}
-
-#include <string>
-
-auto foo(bool b) -> hrs::expected<std::string, int>
-{
-	if(b)
-		return 1;
-
-	return "hello!";
-}
-
-auto bar() -> hrs::expected<std::string, float>
-{
-	HRS_PROPAGATE_EXP(val_get, foo(true))
-	return val_get;
-}
-
-auto first_foo(std::string val) -> hrs::expected<std::string, int>
-{
-	std::string str(std::move(val));
-	return str.append("amogus");
-}
-
-auto second_foo(std::string val) -> hrs::expected<std::string, int>
-{
-	if(val.empty())
-		return 1;
-
-	std::string str(std::move(val));
-
-	//return {hrs::unexpected, 1};
-
-	return str.append("abobus");
-}
-
-auto func()
-{
-	auto res = foo(true)
-				   .and_then
-			   ([](std::string val)
-				{
-					std::string str(std::move(val));
-					return str.append("amogus");
-				})
-				   .and_then
-			   ([](std::string val) -> hrs::expected<std::string, int>
-				{
-					if(val.empty())
-						return 1;
-
-					std::string str(std::move(val));
-					return str.append("abobus");
-				})
-				   .or_else
-			   ([](int err)
-				{
-					return "Hello!";
-				})
-				   .value_or("");
 }

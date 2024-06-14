@@ -9,8 +9,6 @@ target_sources(
 	Renderer
 	    PRIVATE
 		Vulkan/VulkanInclude.h
-		Vulkan/VulkanLibrary.h
-		Vulkan/VulkanLibrary.cpp
 		Vulkan/VulkanLoaderGenBegin.h
 		Vulkan/VulkanLoaderGenEnd.h
 )
@@ -18,22 +16,19 @@ target_sources(
 target_sources(
 	Renderer
 	    PRIVATE
-		Context/Context.h
-		Context/Context.cpp
-		Context/ContextDestructors.h
-		Context/ContextDestructors.cpp
+		Context/VulkanLibrary.h
+		Context/VulkanLibrary.cpp
 		Context/GlobalLoader.h
 		Context/GlobalLoader.cpp
-		Context/Instance.h
-		Context/Instance.cpp
 		Context/InstanceLoader.h
 		Context/InstanceLoader.cpp
+		Context/Context.h
+		Context/Context.cpp
 		Context/Device.h
 		Context/Device.cpp
 		Context/DeviceLoader.h
 		Context/DeviceLoader.cpp
-		Context/InstanceSurfaceStorage.h
-		Context/InstanceSurfaceStorage.cpp
+		Context/DeviceWorker.h
 )
 
 

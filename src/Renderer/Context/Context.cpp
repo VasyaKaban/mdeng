@@ -1,52 +1,73 @@
 #include "Context.h"
+#include "VulkanLibrary.h"
 
 namespace FireLand
 {
+	Context::Context() noexcept
+		: parent_library(nullptr),
+		  handle(VK_NULL_HANDLE) {}
+
 	Context::~Context()
 	{
 		Destroy();
 	}
 
 	Context::Context(Context &&ctx) noexcept
-		: library(std::move(ctx.library)),
-		  library_name(std::move(ctx.library_name)),
-		  global_loader(ctx.global_loader),
-		  context_destructors(ctx.context_destructors),
-		  instances(std::move(ctx.instances)) {}
+		: parent_library(ctx.parent_library),
+		  handle(std::exchange(ctx.handle, VK_NULL_HANDLE)),
+		  physical_devices(std::move(ctx.physical_devices)),
+		  surfaces(std::move(ctx.surfaces)),
+		  devices(std::move(ctx.devices)),
+		  loader(ctx.loader),
+		  allocation_cbacks(ctx.allocation_cbacks) {}
 
 	Context & Context::operator=(Context &&ctx) noexcept
 	{
 		Destroy();
 
-		library = std::move(ctx.library);
-		library_name = std::move(ctx.library_name);
-		global_loader = ctx.global_loader;
-		context_destructors = ctx.context_destructors;
-		instances = std::move(ctx.instances);
+		parent_library = ctx.parent_library;
+		handle = std::exchange(ctx.handle, VK_NULL_HANDLE);
+		physical_devices = std::move(ctx.physical_devices);
+		surfaces = std::move(ctx.surfaces);
+		devices = std::move(ctx.devices);
+		loader = ctx.loader;
+		allocation_cbacks = ctx.allocation_cbacks;
 
 		return *this;
 	}
 
-	bool Context::Init(std::span<const char * const> library_names) noexcept
+	VkResult Context::Init(VulkanLibrary *_parent_library,
+						   VkInstance _handle,
+						   std::shared_ptr<VkAllocationCallbacks> _allocation_cbacks)
 	{
+		if(!_parent_library || _handle == VK_NULL_HANDLE)
+			return VK_ERROR_INITIALIZATION_FAILED;
+
 		Destroy();
 
-		VulkanLibrary _library;
-		auto lib_index_opt = _library.Open(library_names);
-		if(!lib_index_opt)
-			return false;
+		bool loader_res = loader.Init(_handle, _parent_library->GetResolver());
+		if(!loader_res)
+			return VK_ERROR_INITIALIZATION_FAILED;
 
-		GlobalLoader _global_loader;
-		bool loader_init = _global_loader.Init(_library);
-		if(!loader_init)
-			return false;
+		std::vector<VkPhysicalDevice> _physcial_devices;
+		if(loader.EnumeratePhysicalDevices)
+		{
+			std::uint32_t physical_device_count = 0;
+			VkResult res = loader.EnumeratePhysicalDevices(_handle, &physical_device_count, nullptr);
+			if(res != VK_SUCCESS)
+				return res;
 
-		library = std::move(_library);
-		library_name = library_names[*lib_index_opt];
-		global_loader = _global_loader;
-		context_destructors.Init(global_loader.vkGetInstanceProcAddr);
+			_physcial_devices.resize(physical_device_count);
+			res = loader.EnumeratePhysicalDevices(_handle, &physical_device_count, _physcial_devices.data());
+			if(res != VK_SUCCESS)
+				return res;
+		}
 
-		return true;
+		parent_library = _parent_library;
+		handle = _handle;
+		physical_devices = std::move(_physcial_devices);
+		allocation_cbacks = _allocation_cbacks;
+		return VK_SUCCESS;
 	}
 
 	void Context::Destroy() noexcept
@@ -54,13 +75,58 @@ namespace FireLand
 		if(!IsCreated())
 			return;
 
-		instances.clear();
-		library.Close();
+		devices = decltype(devices){};
+		if(loader.DestroySurfaceKHR)//MAY LEAK OTHERWISE
+			for(auto surf : surfaces)
+				loader.DestroySurfaceKHR(handle, surf, allocation_cbacks.get());
+
+		surfaces = decltype(surfaces){};
+		physical_devices = decltype(physical_devices){};
+
+
+		if(loader.DestroyInstance)//MAY LEAK OTHERWISE
+			loader.DestroyInstance(handle, allocation_cbacks.get());
+
+		allocation_cbacks.reset();
+	}
+
+	hrs::expected<Device *, VkResult>
+	Context::CreateDevice(const VkDeviceCreateInfo &info,
+						  VkPhysicalDevice physical_device,
+						  std::shared_ptr<VkAllocationCallbacks> _allocation_callbacks)
+	{
+		if(!IsCreated())
+			return VK_ERROR_INITIALIZATION_FAILED;
+
+		if(std::ranges::find(physical_devices, physical_device) == physical_devices.end())
+			return VK_ERROR_INITIALIZATION_FAILED;
+
+		VkDevice _device;
+		VkResult res = loader.CreateDevice(physical_device, &info, allocation_cbacks.get(), &_device);
+		if(res != VK_SUCCESS)
+			return res;
+
+		Device device;
+		res = device.Init(this, _device, physical_device, _allocation_callbacks);
+		if(res != VK_SUCCESS)
+		{
+			loader.DestroyDevice(_device, allocation_cbacks.get());
+			return res;
+		}
+
+		devices.push_back(std::move(device));
+		return &devices.back();
+	}
+
+	void Context::DestroyDevice(const Device &device) noexcept
+	{
+		if(auto it = std::ranges::find(devices, device); it != devices.end())
+			devices.erase(it);
 	}
 
 	bool Context::IsCreated() const noexcept
 	{
-		return library.IsOpen();
+		return handle != VK_NULL_HANDLE;
 	}
 
 	Context::operator bool() const noexcept
@@ -68,53 +134,61 @@ namespace FireLand
 		return IsCreated();
 	}
 
-	const std::string & Context::GetLibraryName() const noexcept
+	bool Context::operator==(const Context &ctx) const noexcept
 	{
-		return library_name;
+		return parent_library == ctx.parent_library && handle == ctx.handle;
 	}
 
-	const VulkanLibrary & Context::GetLibrary() const noexcept
+	PFN_vkVoidFunction Context::GetProcAddressRaw(const char *name) const noexcept
 	{
-		return library;
+		if(!IsCreated())
+			return nullptr;
+
+		return loader.GetInstanceProcAddr(handle, name);
 	}
 
-	const GlobalLoader & Context::GetGlobalLoader() const noexcept
+	const InstanceLoader & Context::GetLoader() const noexcept
 	{
-		return global_loader;
+		return loader;
 	}
 
-	const ContextDestructors & Context::GetContextDestructors() const noexcept
+	VulkanLibrary * Context::GetLibrary() noexcept
 	{
-		return context_destructors;
+		return parent_library;
 	}
 
-	void Context::AddInstance(Instance *instance)
+	const VulkanLibrary * Context::GetLibrary() const noexcept
 	{
-		for(const auto &i : instances)
-			if(i.get() == instance)
-				return;
-
-		instances.push_back(std::unique_ptr<Instance>(instance));
+		return parent_library;
 	}
 
-	void Context::DeleteInstance(Instance *instance) noexcept
+	VkInstance Context::GetHandle() const noexcept
 	{
-		auto it = std::ranges::find_if(instances, [instance](const std::unique_ptr<Instance> &i)
-		{
-			return i.get() == instance;
-		});
-
-		if(it != instances.end())
-			instances.erase(it);
+		return handle;
 	}
 
-	bool Context::HasInstance(Instance *instance) const noexcept
+	const std::vector<VkPhysicalDevice> & Context::GetPhysicalDevices() const noexcept
 	{
-		auto it = std::ranges::find_if(instances, [instance](const std::unique_ptr<Instance> &i)
-		{
-			return i.get() == instance;
-		});
+		return physical_devices;
+	}
 
-		return it != instances.end();
+	const std::vector<VkSurfaceKHR> & Context::GetSurfaces() const noexcept
+	{
+		return surfaces;
+	}
+
+	std::vector<Device> & Context::GetDevices() noexcept
+	{
+		return devices;
+	}
+
+	const std::vector<Device> & Context::GetDevices() const noexcept
+	{
+		return devices;
+	}
+
+	std::shared_ptr<VkAllocationCallbacks> Context::GetAllocatorCallbacks() const noexcept
+	{
+		return allocation_cbacks;
 	}
 };

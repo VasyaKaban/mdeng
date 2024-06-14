@@ -1,22 +1,19 @@
 #include "DeviceLoader.h"
+#include "../Vulkan/VulkanLoaderGenBegin.h"
 
 namespace FireLand
 {
-	DeviceLoader::DeviceLoader() noexcept
-		: vkGetDeviceProcAddr(nullptr),
-		  vkDestroyDevice(nullptr) {}
-
-	bool DeviceLoader::Init(VkDevice device, PFN_vkGetDeviceProcAddr instance_vkGetDeviceProcAddr) noexcept
+	bool DeviceLoader::Init(VkDevice handle, PFN_vkGetDeviceProcAddr instance_vkGetDeviceProcAddr) noexcept
 	{
-		vkGetDeviceProcAddr
-			= reinterpret_cast<PFN_vkGetDeviceProcAddr>(instance_vkGetDeviceProcAddr(device, "vkGetDeviceProcAddr"));
-
-		if(!vkGetDeviceProcAddr)
+		if(handle == VK_NULL_HANDLE || !instance_vkGetDeviceProcAddr)
 			return false;
 
-		vkDestroyDevice
-			= reinterpret_cast<PFN_vkDestroyDevice>(instance_vkGetDeviceProcAddr(device, "vkDestroyDevice"));
+		FIRE_LAND_RESOLVE_VK_FUNCTION_COND(instance_vkGetDeviceProcAddr, handle, GetDeviceProcAddr, false)
+		FIRE_LAND_RESOLVE_VK_FUNCTION_COND(GetDeviceProcAddr, handle, GetDeviceProcAddr, false)
+		FIRE_LAND_RESOLVE_VK_FUNCTION_COND(GetDeviceProcAddr, handle, DestroyDevice, false)
 
 		return true;
 	}
 };
+
+#include "../Vulkan/VulkanLoaderGenEnd.h"

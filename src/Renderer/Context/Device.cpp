@@ -1,12 +1,12 @@
 #include "Device.h"
-#include "Instance.h"
 #include "Context.h"
 
 namespace FireLand
 {
 	Device::Device() noexcept
-		: parent_instance(nullptr),
-		  handle(VK_NULL_HANDLE) {}
+		: parent_context(nullptr),
+		  handle(VK_NULL_HANDLE),
+		  physical_device(VK_NULL_HANDLE) {}
 
 	Device::~Device()
 	{
@@ -14,65 +14,46 @@ namespace FireLand
 	}
 
 	Device::Device(Device &&dev) noexcept
-		: parent_instance(dev.parent_instance),
+		: parent_context(dev.parent_context),
 		  handle(std::exchange(dev.handle, VK_NULL_HANDLE)),
-		  device_loader(dev.device_loader),
-		  allocation_callbacks(std::move(dev.allocation_callbacks)),
-		  device_workers(std::move(dev.device_workers)) {}
+		  physical_device(std::exchange(dev.physical_device, VK_NULL_HANDLE)),
+		  allocation_cbacks(dev.allocation_cbacks),
+		  loader(dev.loader),
+		  workers(std::move(dev.workers)) {}
 
 	Device & Device::operator=(Device &&dev) noexcept
 	{
 		Destroy();
 
-		parent_instance = dev.parent_instance;
+		parent_context = dev.parent_context;
 		handle = std::exchange(dev.handle, VK_NULL_HANDLE);
-		device_loader = dev.device_loader;
-		allocation_callbacks = std::move(dev.allocation_callbacks);
-		device_workers = std::move(dev.device_workers);
+		physical_device = std::exchange(dev.physical_device, VK_NULL_HANDLE);
+		allocation_cbacks = dev.allocation_cbacks;
+		loader = dev.loader;
+		workers = std::move(dev.workers);
 
 		return *this;
 	}
 
-	VkResult Device::Init(Instance *_parent_instance,
-						  VkPhysicalDevice physical_device,
-						  const VkDeviceCreateInfo &info,
-						  const VkAllocationCallbacks *_allocation_callbacks) noexcept
+	VkResult Device::Init(Context *_parent_context,
+						  VkDevice _handle,
+						  VkPhysicalDevice _physical_device,
+						  std::shared_ptr<VkAllocationCallbacks> _allocation_cbacks) noexcept
 	{
 		Destroy();
 
-		VkDevice _handle;
-		VkResult res = _parent_instance->GetInstanceLoader().vkCreateDevice(physical_device,
-																			&info,
-																			_allocation_callbacks,
-																			&_handle);
+		if(!_parent_context || _handle == VK_NULL_HANDLE || _physical_device == VK_NULL_HANDLE)
+			return VK_ERROR_INITIALIZATION_FAILED;
 
-		if(res != VkResult::VK_SUCCESS)
-			return res;
+		bool loader_res = loader.Init(_handle, _parent_context->GetLoader().GetDeviceProcAddr);
+		if(!loader_res)
+			return VK_ERROR_INITIALIZATION_FAILED;
 
-		DeviceLoader _device_loader;
-		bool init_res = _device_loader.Init(_handle,
-											_parent_instance->GetInstanceLoader().vkGetDeviceProcAddr);
-
-		if(!init_res)
-		{
-			const ContextDestructors &context_destructors
-				= _parent_instance->GetParentContext()->GetContextDestructors();
-			if(context_destructors.vkDestroyDevice)
-				context_destructors.vkDestroyDevice(_handle, _allocation_callbacks);
-
-			//Maybe VkResult leak!
-			return VkResult::VK_ERROR_INITIALIZATION_FAILED;
-		}
-
-		parent_instance = _parent_instance;
+		parent_context = _parent_context;
 		handle = _handle;
-		device_loader = _device_loader;
-		if(_allocation_callbacks)
-			allocation_callbacks = *_allocation_callbacks;
-		else
-			allocation_callbacks = {};
-
-		return VkResult::VK_SUCCESS;
+		physical_device = _physical_device;
+		allocation_cbacks = _allocation_cbacks;
+		return VK_SUCCESS;
 	}
 
 	void Device::Destroy() noexcept
@@ -80,9 +61,35 @@ namespace FireLand
 		if(!IsCreated())
 			return;
 
-		device_workers.clear();
-		device_loader.vkDestroyDevice(handle, GetAllocationCallbacks());
+		workers = decltype(workers){};
+		parent_context->GetLoader().DestroyDevice(handle, parent_context->GetAllocatorCallbacks().get());
 		handle = VK_NULL_HANDLE;
+		physical_device = VK_NULL_HANDLE;
+		allocation_cbacks = {};
+	}
+
+	void Device::AddDeviceWorker(DeviceWorker *worker)
+	{
+		if(auto it = find_worker(worker); it == workers.end())
+			workers.push_back(std::unique_ptr<DeviceWorker>(worker));
+	}
+
+	void Device::DropDeviceWorker(DeviceWorker *worker) noexcept
+	{
+		if(auto it = find_worker(worker); it != workers.end())
+			workers.erase(it);
+	}
+
+	DeviceWorker * Device::ReleaseDeviceWorker(DeviceWorker *worker) noexcept
+	{
+		if(auto it = find_worker(worker); it != workers.end())
+		{
+			DeviceWorker *w = it->release();
+			workers.erase(it);
+			return w;
+		}
+
+		return nullptr;
 	}
 
 	bool Device::IsCreated() const noexcept
@@ -95,43 +102,32 @@ namespace FireLand
 		return IsCreated();
 	}
 
-	void Device::AddDeviceWorker(DeviceWorker *dev_worker)
+	bool Device::operator==(const Device &device) const noexcept
 	{
-		if(!(IsCreated() && dev_worker))
-			return;
-
-		device_workers.push_back(std::unique_ptr<DeviceWorker>(dev_worker));
+		return parent_context == device.parent_context && handle == device.handle;
 	}
 
-	void Device::DeleteDeviceWorker(DeviceWorker *dev_worker) noexcept
+	PFN_vkVoidFunction Device::GetProcAddressRaw(const char *name) const noexcept
 	{
-		auto it = std::ranges::find_if(device_workers, [dev_worker](const std::unique_ptr<DeviceWorker> &u_dw)
-		{
-			return u_dw.get() == dev_worker;
-		});
+		if(!IsCreated())
+			return nullptr;
 
-		if(it != device_workers.end())
-			device_workers.erase(it);
+		return loader.GetDeviceProcAddr(handle, name);
 	}
 
-	bool Device::HasDeviceWorker(DeviceWorker *dev_worker) const noexcept
+	const DeviceLoader & Device::GetLoader() const noexcept
 	{
-		auto it = std::ranges::find_if(device_workers, [dev_worker](const std::unique_ptr<DeviceWorker> &u_dw)
-		{
-			return u_dw.get() == dev_worker;
-		});
-
-		return it != device_workers.end();
+		return loader;
 	}
 
-	Instance * Device::GetParentInstance() noexcept
+	Context * Device::GetParentContext() noexcept
 	{
-		return parent_instance;
+		return parent_context;
 	}
 
-	const Instance * Device::GetParentInstance() const noexcept
+	const Context * Device::GetParentContext() const noexcept
 	{
-		return parent_instance;
+		return parent_context;
 	}
 
 	VkDevice Device::GetHandle() const noexcept
@@ -139,16 +135,26 @@ namespace FireLand
 		return handle;
 	}
 
-	const DeviceLoader & Device::GetDeviceLoader() const noexcept
+	VkPhysicalDevice Device::GetPhysicalDevice() const noexcept
 	{
-		return device_loader;
+		return physical_device;
 	}
 
-	const VkAllocationCallbacks * Device::GetAllocationCallbacks() const noexcept
+	std::vector<std::unique_ptr<DeviceWorker>> & Device::GetDeviceWorkers() noexcept
 	{
-		if(allocation_callbacks)
-			return &*allocation_callbacks;
+		return workers;
+	}
 
-		return nullptr;
+	const std::vector<std::unique_ptr<DeviceWorker>> & Device::GetDeviceWorkers() const noexcept
+	{
+		return workers;
+	}
+
+	std::vector<std::unique_ptr<DeviceWorker>>::iterator Device::find_worker(DeviceWorker *worker) noexcept
+	{
+		return std::ranges::find_if(workers, [worker](const std::unique_ptr<DeviceWorker> &w)
+		{
+			return worker == w.get();
+		});
 	}
 };

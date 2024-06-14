@@ -1,10 +1,12 @@
 #pragma once
 
 #include <array>
-#include <optional>
 #include <span>
+#include <optional>
 #include "hrs/dynamic_library.hpp"
-#include "VulkanInclude.h"
+#include "hrs/expected.hpp"
+#include "GlobalLoader.h"
+#include "Context.h"
 
 namespace FireLand
 {
@@ -23,25 +25,36 @@ namespace FireLand
 		VulkanLibrary & operator=(VulkanLibrary &&vl) noexcept;
 
 		void Close() noexcept;
-		std::optional<std::size_t> Open(std::span<const char * const> names) noexcept;
+		std::optional<std::size_t> Open(std::span<const char * const> names = DEFAULT_NAMES) noexcept;
+
+		hrs::expected<Context *, VkResult>
+		CreateContext(const VkInstanceCreateInfo &info,
+					  std::shared_ptr<VkAllocationCallbacks> _allocation_cbacks);
+
+		void DestroyContext(const Context &ctx) noexcept;
 
 		bool IsOpen() const noexcept;
 		explicit operator bool() const noexcept;
 
 		PFN_vkGetInstanceProcAddr GetResolver() const noexcept;
 
-		PFN_vkVoidFunction GetProcAddressRaw(const char *name) const noexcept;
+		PFN_vkVoidFunction GetProcAddressRaw(const char * const name) const noexcept;
+
+		const GlobalLoader & GetLoader() const noexcept;
+
+		bool operator==(const VulkanLibrary &vl) const noexcept;
 
 		template<typename P>
 			requires std::is_pointer_v<P> && std::is_function_v<std::remove_pointer_t<P>>
-		P GetProcAddress(const char *name) const noexcept
+		P GetProcAddress(const char * const name) const noexcept
 		{
 			return reinterpret_cast<P>(GetProcAddressRaw(name));
 		}
 
 	private:
 		hrs::dynamic_library lib;
-		PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr;
+		GlobalLoader loader;
+		std::vector<Context> contexts;
 	};
 };
 

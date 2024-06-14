@@ -1,16 +1,17 @@
 #pragma once
 
 #include "../Vulkan/VulkanInclude.h"
+#include "../Vulkan/VulkanLoaderGenBegin.h"
 
 namespace FireLand
 {
 	struct DeviceLoader
 	{
-		PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr;
-		PFN_vkDestroyDevice vkDestroyDevice;
+		FIRE_LAND_DECL_VK_FUNCTION(GetDeviceProcAddr)
+		FIRE_LAND_DECL_VK_FUNCTION(DestroyDevice)
 
-		DeviceLoader() noexcept;
-
-		bool Init(VkDevice device, PFN_vkGetDeviceProcAddr instance_vkGetDeviceProcAddr) noexcept;
+		bool Init(VkDevice handle, PFN_vkGetDeviceProcAddr instance_vkGetDeviceProcAddr) noexcept;
 	};
 };
+
+#include "../Vulkan/VulkanLoaderGenEnd.h"

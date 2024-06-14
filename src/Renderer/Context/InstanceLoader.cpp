@@ -1,30 +1,26 @@
 #include "InstanceLoader.h"
+#include "../Vulkan/VulkanLoaderGenBegin.h"
 
 namespace FireLand
 {
-	InstanceLoader::InstanceLoader() noexcept
-		: vkGetInstanceProcAddr(nullptr),
-		  vkDestroyInstance(nullptr),
-		  vkCreateDevice(nullptr),
-		  vkGetDeviceProcAddr(nullptr) {}
-
-	bool InstanceLoader::Init(VkInstance instance, PFN_vkGetInstanceProcAddr global_vkGetInstanceProcAddr) noexcept
+	bool InstanceLoader::Init(VkInstance handle,
+							  PFN_vkGetInstanceProcAddr global_vkGetInstanceProcAddr) noexcept
 	{
-		vkGetInstanceProcAddr =
-			reinterpret_cast<PFN_vkGetInstanceProcAddr>(global_vkGetInstanceProcAddr(instance, "vkGetInstanceProcAddr"));
-
-		if(!vkGetInstanceProcAddr)
+		if(!global_vkGetInstanceProcAddr || handle == VK_NULL_HANDLE)
 			return false;
 
-		vkDestroyInstance
-			= reinterpret_cast<PFN_vkDestroyInstance>(global_vkGetInstanceProcAddr(instance, "vkDestroyInstance"));
+		FIRE_LAND_RESOLVE_VK_FUNCTION_COND(global_vkGetInstanceProcAddr, handle, GetInstanceProcAddr,false)
+		FIRE_LAND_RESOLVE_VK_FUNCTION_COND(GetInstanceProcAddr, handle, GetInstanceProcAddr, false)
+		FIRE_LAND_RESOLVE_VK_FUNCTION_COND(GetInstanceProcAddr, handle, DestroyInstance, false)
+		FIRE_LAND_RESOLVE_VK_FUNCTION_COND(GetInstanceProcAddr, handle, CreateDevice, false)
+		FIRE_LAND_RESOLVE_VK_FUNCTION_COND(GetInstanceProcAddr, handle, DestroyDevice, false)
 
-		vkCreateDevice
-			= reinterpret_cast<PFN_vkCreateDevice>(global_vkGetInstanceProcAddr(instance, "vkCreateDevice"));
-
-		vkGetDeviceProcAddr
-			= reinterpret_cast<PFN_vkGetDeviceProcAddr>(global_vkGetInstanceProcAddr(instance, "vkGetDeviceProcAddr"));
+		FIRE_LAND_RESOLVE_VK_FUNCTION(GetInstanceProcAddr, handle, EnumeratePhysicalDevices)
+		FIRE_LAND_RESOLVE_VK_FUNCTION(GetInstanceProcAddr, handle, DestroySurfaceKHR)
+		FIRE_LAND_RESOLVE_VK_FUNCTION(GetInstanceProcAddr, handle, GetDeviceProcAddr)
 
 		return true;
 	}
 };
+
+#include "../Vulkan/VulkanLoaderGenEnd.h"
