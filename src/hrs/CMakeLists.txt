@@ -22,12 +22,15 @@ Hrs
 		sized_free_block_chain.hpp
 		unsized_free_block_chain.hpp
 		hint_cast_object.hpp
-		enum_meta.hpp
 		resource.hpp
 		stacktrace.hpp
 		demangle.hpp
 		dynamic_library.hpp
 		variadic.hpp
+		#multikey_map.hpp
+		one_of.hpp
+		distinct.hpp
+		copy_traits.hpp
 )
 
 if(UNIX)
@@ -69,6 +72,50 @@ Hrs
 		math/matrix_common.hpp
 		math/matrix.hpp
 		math/matrix_view.hpp
-		math/quaternion.hpp)
+		math/quaternion.hpp
+)
+
+target_sources(
+Hrs
+    PRIVATE
+	    test/tests.h
+		test/tests_undef.h
+		test/test_data.h
+		test/test_data.cpp
+		test/test_environment.h
+		test/test_environment.cpp
+)
+
+target_sources(
+Hrs
+    PRIVATE
+	    meta/class_meta.hpp
+		meta/class_meta_def.hpp
+		meta/class_meta_undef.hpp
+		meta/enum_meta.hpp
+		meta/enum_meta_def.hpp
+		meta/enum_meta_undef.hpp
+		meta/split_namespace.hpp
+		meta/meta_attributes.hpp
+		meta/reflexpr.hpp
+)
+
+target_sources(
+Hrs
+    PRIVATE
+	    static_string/static_string.hpp
+		static_string/algorithm.hpp
+)
+
+target_sources(
+Hrs
+    PRIVATE
+	    multikey_map/node.hpp
+		multikey_map/iterator.hpp
+		multikey_map/entry.hpp
+		multikey_map/basic_multikey_map_fwd.hpp
+		multikey_map/basic_multikey_map.hpp
+		multikey_map/multikey_map.hpp
+)
 
 set_target_properties(Hrs PROPERTIES LINKER_LANGUAGE CXX)

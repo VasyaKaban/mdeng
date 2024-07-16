@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstddef>
+#include <type_traits>
+#include <utility>
 
 namespace hrs
 {
@@ -39,5 +41,26 @@ namespace hrs
 		template<std::size_t Index>
 			requires (Index < COUNT)
 		using nth_t = nth<Index>::type;
+
+		template<template<typename ...> typename F>
+		constexpr static auto apply() noexcept
+		{
+			return F<Args...>();
+		}
 	};
+
+	template<typename ...Args1, typename ...Args2>
+	constexpr auto operator+(variadic<Args1...>, variadic<Args2...>) noexcept
+	{
+		return variadic<Args1..., Args2...>{};
+	}
+
+	template<std::size_t Index, typename A, typename ...Args>
+	constexpr auto & nth_argument(A &&arg, Args &&...args) noexcept
+	{
+		if constexpr(Index == 0)
+			return arg;
+		else
+			return nth_argument<Index - 1>(std::forward<Args>(args)...);
+	}
 };
