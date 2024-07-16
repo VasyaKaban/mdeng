@@ -75,11 +75,10 @@ HRS_ASSERT_TEST(X <= Y)
 HRS_ASSERT_TEST(X >= Y)
 
 //Output function
-#define HRS_MAIN_TEST(OUTPUT_FUNC, END_OUTPUT_FUNC) \
+#define HRS_MAIN_TEST(...) \
 int main(int argc, char **argv) \
 { \
-	::hrs::test::test_environment::get_global_environment().set_output_function(OUTPUT_FUNC); \
-	::hrs::test::test_environment::get_global_environment().set_end_output_function(OUTPUT_FUNC); \
+	__VA_OPT__(::hrs::test::test_environment::get_global_environment().set_config(__VA_ARGS__)); \
 	::hrs::test::test_environment::get_global_environment().run(); \
 	return 0; \
 }

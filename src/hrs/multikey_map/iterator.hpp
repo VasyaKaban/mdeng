@@ -69,9 +69,9 @@ namespace hrs
 					while(true)
 					{
 						auto parent = n->parents[Index];
-						if(!parent)
-							return *this;
-						//assert(parent);
+						//if(!parent)
+						//	return *this;
+						assert(parent);
 						if(parent)
 						{
 							if(parent->children[Index].left == n)
@@ -113,9 +113,9 @@ namespace hrs
 					while(true)
 					{
 						auto parent = n->parents[Index];
-						if(!parent)
-							return *this;
-						//assert(parent);
+						//if(!parent)
+						//	return *this;
+						assert(parent);
 
 						if(parent->children[Index].right == n)
 						{

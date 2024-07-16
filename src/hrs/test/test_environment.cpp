@@ -43,6 +43,59 @@ namespace hrs
 			return loc;
 		}
 
+		test_environment::test_config::test_config(std::function<output_f> &&_output_function,
+												   std::function<end_output_f> &&_end_output_function,
+												   ignore_group_names_container &&_ignore_group_names)
+			: output_function(std::move(_output_function)),
+			  end_output_function(std::move(_end_output_function)),
+			  ignore_group_names(std::move(_ignore_group_names))
+		{
+			if(!output_function)
+				output_function = test_environment::DEFAULT_OUTPUT;
+
+			if(!end_output_function)
+				end_output_function = test_environment::DEFAULT_END_OUTPUT;
+		}
+
+		void test_environment::test_config::set_ouput_function(std::function<output_f> &&_output_function)
+		{
+			if(_output_function)
+				output_function = std::move(_output_function);
+		}
+
+		void
+		test_environment::test_config::set_output_end_function(std::function<end_output_f> &&_end_output_function)
+		{
+			if(_end_output_function)
+				end_output_function = std::move(_end_output_function);
+		}
+
+		void
+		test_environment::test_config::set_ignore_group_names(ignore_group_names_container &&_ignore_group_names)
+		{
+			ignore_group_names = std::move(_ignore_group_names);
+		}
+
+		void test_environment::test_config::erase_ignore_group_name(std::string_view name)
+		{
+			auto it = ignore_group_names.find(name);
+			if(it != ignore_group_names.end())
+				ignore_group_names.erase(it);
+		}
+
+		void test_environment::test_config::insert_ignore_group_name(std::string_view name)
+		{
+			auto it = ignore_group_names.find(name);
+			if(it != ignore_group_names.end())
+				ignore_group_names.insert(std::string(name));
+		}
+
+		test_environment::test_environment()
+			: config{DEFAULT_OUTPUT, DEFAULT_END_OUTPUT} {}
+
+		test_environment::test_environment(const test_config &cfg)
+			: config(cfg) {}
+
 		void test_environment::add_test(std::function<void ()> &&func,
 										std::string_view name,
 										std::string_view tag,
@@ -73,29 +126,38 @@ namespace hrs
 			std::size_t global_i = 0;
 			for(const auto &[group_name, group_tests] : tests)
 			{
+				bool ignore_group = config.ignore_group_names.find(group_name) != config.ignore_group_names.end();
+
 				std::size_t within_group_i = 0;
 				for(const test_data &test : group_tests)
 				{
 					std::exception_ptr err = std::exception_ptr(nullptr);
 					test_result test_res = test_result::success;
-					try
+					if(ignore_group)
 					{
-						if(test.get_properties() & test_property::ignore)
-							test_res = test_result::ignored;
-						else
-							test();
+						test_res = test_result::ignored;
 					}
-					catch(...)
+					else
 					{
-						if(test.get_properties() & test_property::may_fail)
-							test_res = test_result::success_due_failure;
-						else
-							test_res = test_result::failed;
+						try
+						{
+							if(test.get_properties() & test_property::ignore)
+								test_res = test_result::ignored;
+							else
+								test();
+						}
+						catch(...)
+						{
+							if(test.get_properties() & test_property::may_fail)
+								test_res = test_result::success_due_failure;
+							else
+								test_res = test_result::failed;
 
-						err = std::current_exception();
+							err = std::current_exception();
+						}
 					}
 
-					output_function(global_i, within_group_i, group_name, test, test_res, err);
+					config.output_function(global_i, within_group_i, group_name, test, test_res, err);
 					global_i++;
 					within_group_i++;
 
@@ -117,24 +179,17 @@ namespace hrs
 				}
 			}
 
-			end_output_function(global_i,
-								success_count,
-								failed_count,
-								ignored_count,
-								success_due_failure_count,
-								tests);
+			config.end_output_function(global_i,
+									   success_count,
+									   failed_count,
+									   ignored_count,
+									   success_due_failure_count,
+									   tests);
 		}
 
-		void test_environment::set_output_function(std::function<output_f> &&out_func) noexcept
+		void test_environment::set_config(test_config &&cfg) noexcept
 		{
-			if(out_func)
-				output_function = std::move(out_func);
-		}
-
-		void test_environment::set_end_output_function(std::function<end_output_f> &&out_func) noexcept
-		{
-			if(out_func)
-				end_output_function = std::move(out_func);
+			config = std::move(cfg);
 		}
 
 		test_environment & test_environment::get_global_environment()

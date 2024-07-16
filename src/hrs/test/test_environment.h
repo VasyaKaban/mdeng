@@ -2,6 +2,7 @@
 
 #include <map>
 #include <list>
+#include <unordered_set>
 #include "test_data.h"
 
 namespace hrs
@@ -33,6 +34,18 @@ namespace hrs
 
 			test_assert_exception & set_description(std::string_view _description) &;
 			test_assert_exception && set_description(std::string_view _description) &&;
+
+			template<typename ...Args>
+			test_assert_exception & set_description_fmt(std::format_string<Args...> fmt, Args &&...args) &
+			{
+				return set_description(std::format(fmt, std::forward<Args>(args)...));
+			}
+
+			template<typename ...Args>
+			test_assert_exception && set_description_fmt(std::format_string<Args...> fmt, Args &&...args) &&
+			{
+				return std::move(*this).set_description(std::format(fmt, std::forward<Args>(args)...));
+			}
 
 			const std::string & get_assert_message() const noexcept;
 			const std::string & get_description() const noexcept;
@@ -88,7 +101,56 @@ namespace hrs
 									  std::size_t success_due_failure_count,
 									  const tests_t &tests);
 
-			test_environment() = default;
+			class test_config
+			{
+			public:
+
+				friend class test_environment;
+
+				struct ignore_groups_hasher
+				{
+					using is_transparent = void;
+
+					std::size_t operator()(const std::string &str) const noexcept
+					{
+						return std::hash<std::string>{}(str);
+					}
+
+					std::size_t operator()(std::string_view sv) const noexcept
+					{
+						return std::hash<std::string_view>{}(sv);
+					}
+				};
+
+				using ignore_group_names_container = std::unordered_set<std::string,
+																		ignore_groups_hasher,
+																		std::equal_to<>>;
+
+				test_config() = default;
+				test_config(std::function<output_f> &&_output_function,
+							std::function<end_output_f> &&_end_output_function,
+							ignore_group_names_container &&_ignore_group_names = {});
+
+				~test_config() = default;
+				test_config(const test_config &) = default;
+				test_config(test_config &&) = default;
+				test_config & operator=(const test_config &) = default;
+				test_config & operator=(test_config &&) = default;
+
+				void set_ouput_function(std::function<output_f> &&_output_function);
+				void set_output_end_function(std::function<end_output_f> &&_end_output_function);
+				void set_ignore_group_names(ignore_group_names_container &&_ignore_group_names);
+				void erase_ignore_group_name(std::string_view name);
+				void insert_ignore_group_name(std::string_view name);
+
+			private:
+				std::function<output_f> output_function = DEFAULT_OUTPUT;
+				std::function<end_output_f> end_output_function = DEFAULT_END_OUTPUT;
+				ignore_group_names_container ignore_group_names;
+			};
+
+			test_environment();
+			test_environment(const test_config &cfg);
 			~test_environment() = default;
 
 			void add_test(std::function<void ()> &&func,
@@ -103,26 +165,9 @@ namespace hrs
 						  std::string_view group = {},
 						  hrs::flags<test_property> properties = test_property::none);
 
-			/*template<typename F, typename A>
-			void add_test(F &&_func,
-						  std::string_view name,
-						  std::string_view tag = {},
-						  std::string_view group = {},
-						  hrs::flags<test_property> properties = test_property::none,
-						  A &&_arg = {})
-			{
-				auto wrapped = [func = std::forward<F>(_func), arg = std::forward<A>(_arg)]() -> void
-				{
-					func(arg);
-				};
-
-				add_test(std::move(wrapped), name, tag, group, properties);
-			}*/
-
 			void run();
 
-			void set_output_function(std::function<output_f> &&out_func) noexcept;
-			void set_end_output_function(std::function<end_output_f> &&out_func) noexcept;
+			void set_config(test_config &&cfg) noexcept;
 
 			static test_environment & get_global_environment();
 
@@ -143,8 +188,7 @@ namespace hrs
 		private:
 			void add_test(test_data &&test, std::string_view group);
 		private:
-			std::function<output_f> output_function = DEFAULT_OUTPUT;
-			std::function<end_output_f> end_output_function = DEFAULT_END_OUTPUT;
+			test_config config;
 			tests_t tests;
 
 		};
