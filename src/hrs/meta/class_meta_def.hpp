@@ -5,7 +5,7 @@ namespace hrs \
 { \
 	template<> \
 	struct class_meta<NAME> : detail::class_meta_base<NAME, \
-													  detail::retrieve_namespace_and_name<#NAME>().second, \
+													  #NAME, \
 													  meta_attributes<__VA_ARGS__>> \
 	{
 

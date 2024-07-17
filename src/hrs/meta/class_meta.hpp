@@ -25,13 +25,13 @@ namespace hrs
 				  hrs::non_type_instantiation<meta_attributes> _attributes>
 		struct class_meta_base : _attributes
 		{
-			constexpr static auto name = _name;
+			constexpr static auto name = detail::retrieve_namespace_and_name<_name>().second;
+			constexpr static auto namespaces = detail::retrieve_namespace_and_name<_name>().first;
 			using parents = hrs::variadic<>;
 			using refl_class = C;
 			using member_fields = hrs::variadic<>;
 			using static_fields = hrs::variadic<>;
 			using using_fields = hrs::variadic<>;
-			constexpr static auto namespaces = std::tuple{};
 		};
 	};
 
