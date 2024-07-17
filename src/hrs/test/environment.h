@@ -33,20 +33,13 @@ namespace hrs
 			assert_exception & operator=(const assert_exception &) = default;
 			assert_exception & operator=(assert_exception &&) = default;
 
-			assert_exception & set_description(std::string_view _description) /*&*/;
-			//assert_exception && set_description(std::string_view _description) &&;
+			assert_exception & set_description(std::string_view _description);
 
 			template<typename ...Args>
-			assert_exception & set_description_fmt(std::format_string<Args...> fmt, Args &&...args) /*&*/
+			assert_exception & set_description_fmt(std::format_string<Args...> fmt, Args &&...args)
 			{
 				return set_description(std::format(fmt, std::forward<Args>(args)...));
 			}
-
-			/*template<typename ...Args>
-			assert_exception && set_description_fmt(std::format_string<Args...> fmt, Args &&...args) &&
-			{
-				return std::move(*this).set_description(std::format(fmt, std::forward<Args>(args)...));
-			}*/
 
 			const std::string & get_assert_message() const noexcept;
 			const std::string & get_description() const noexcept;

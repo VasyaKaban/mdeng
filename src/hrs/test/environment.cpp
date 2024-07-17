@@ -16,17 +16,11 @@ namespace hrs
 			: assert_message(_assert_message),
 			  loc(_loc) {}
 
-		assert_exception & assert_exception::set_description(std::string_view _description) /*&*/
+		assert_exception & assert_exception::set_description(std::string_view _description)
 		{
 			description = _description;
 			return *this;
 		}
-
-		/*assert_exception && assert_exception::set_description(std::string_view _description) &&
-		{
-			description = _description;
-			return std::move(*this);
-		}*/
 
 		const std::string & assert_exception::get_assert_message() const noexcept
 		{
