@@ -3,18 +3,12 @@
 #include <functional>
 #include <string_view>
 #include "../flags.hpp"
+#include "test_property.h"
 
 namespace hrs
 {
 	namespace test
 	{
-		enum class test_property
-		{
-			none = 0,
-			ignore = 1 << 0,
-			may_fail = 1 << 1
-		};
-
 		class test_data
 		{
 		public:

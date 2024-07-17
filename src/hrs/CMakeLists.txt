@@ -80,10 +80,13 @@ Hrs
     PRIVATE
 	    test/tests.h
 		test/tests_undef.h
+		test/test_property.h
+		test/test_config.h
+		test/test_config.cpp
 		test/test_data.h
 		test/test_data.cpp
-		test/test_environment.h
-		test/test_environment.cpp
+		test/environment.h
+		test/environment.cpp
 )
 
 target_sources(

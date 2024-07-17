@@ -4,6 +4,7 @@
 #include <list>
 #include <unordered_set>
 #include "test_data.h"
+#include "test_config.h"
 
 namespace hrs
 {
@@ -17,35 +18,35 @@ namespace hrs
 			success_due_failure
 		};
 
-		class test_assert_exception
+		class assert_exception
 		{
 		public:
-			test_assert_exception(std::string_view _assert_message,
-								  std::string_view _description,
-								  const std::source_location &_loc = std::source_location::current());
+			assert_exception(std::string_view _assert_message,
+							 std::string_view _description,
+							 const std::source_location &_loc = std::source_location::current());
 
-			test_assert_exception(std::string_view _assert_message,
-								  const std::source_location &_loc = std::source_location::current());
+			assert_exception(std::string_view _assert_message,
+							 const std::source_location &_loc = std::source_location::current());
 
-			test_assert_exception(const test_assert_exception &) = default;
-			test_assert_exception(test_assert_exception &&) = default;
-			test_assert_exception & operator=(const test_assert_exception &) = default;
-			test_assert_exception & operator=(test_assert_exception &&) = default;
+			assert_exception(const assert_exception &) = default;
+			assert_exception(assert_exception &&) = default;
+			assert_exception & operator=(const assert_exception &) = default;
+			assert_exception & operator=(assert_exception &&) = default;
 
-			test_assert_exception & set_description(std::string_view _description) &;
-			test_assert_exception && set_description(std::string_view _description) &&;
+			assert_exception & set_description(std::string_view _description) /*&*/;
+			//assert_exception && set_description(std::string_view _description) &&;
 
 			template<typename ...Args>
-			test_assert_exception & set_description_fmt(std::format_string<Args...> fmt, Args &&...args) &
+			assert_exception & set_description_fmt(std::format_string<Args...> fmt, Args &&...args) /*&*/
 			{
 				return set_description(std::format(fmt, std::forward<Args>(args)...));
 			}
 
-			template<typename ...Args>
-			test_assert_exception && set_description_fmt(std::format_string<Args...> fmt, Args &&...args) &&
+			/*template<typename ...Args>
+			assert_exception && set_description_fmt(std::format_string<Args...> fmt, Args &&...args) &&
 			{
 				return std::move(*this).set_description(std::format(fmt, std::forward<Args>(args)...));
-			}
+			}*/
 
 			const std::string & get_assert_message() const noexcept;
 			const std::string & get_description() const noexcept;
@@ -57,7 +58,7 @@ namespace hrs
 			std::source_location loc;
 		};
 
-		class test_environment
+		class environment
 		{
 		public:
 			struct test_group_comparator
@@ -101,11 +102,11 @@ namespace hrs
 									  std::size_t success_due_failure_count,
 									  const tests_t &tests);
 
-			class test_config
+			class config
 			{
 			public:
 
-				friend class test_environment;
+				friend class environment;
 
 				struct ignore_groups_hasher
 				{
@@ -126,16 +127,16 @@ namespace hrs
 																		ignore_groups_hasher,
 																		std::equal_to<>>;
 
-				test_config() = default;
-				test_config(std::function<output_f> &&_output_function,
-							std::function<end_output_f> &&_end_output_function,
-							ignore_group_names_container &&_ignore_group_names = {});
+				config() = default;
+				config(std::function<output_f> &&_output_function,
+					   std::function<end_output_f> &&_end_output_function,
+					   ignore_group_names_container &&_ignore_group_names = {});
 
-				~test_config() = default;
-				test_config(const test_config &) = default;
-				test_config(test_config &&) = default;
-				test_config & operator=(const test_config &) = default;
-				test_config & operator=(test_config &&) = default;
+				~config() = default;
+				config(const config &) = default;
+				config(config &&) = default;
+				config & operator=(const config &) = default;
+				config & operator=(config &&) = default;
 
 				void set_ouput_function(std::function<output_f> &&_output_function);
 				void set_output_end_function(std::function<end_output_f> &&_end_output_function);
@@ -149,27 +150,21 @@ namespace hrs
 				ignore_group_names_container ignore_group_names;
 			};
 
-			test_environment();
-			test_environment(const test_config &cfg);
-			~test_environment() = default;
+			environment();
+			environment(const config &_cfg);
+			~environment() = default;
 
 			void add_test(std::function<void ()> &&func,
-						  std::string_view name,
-						  std::string_view tag = {},
-						  std::string_view group = {},
-						  hrs::flags<test_property> properties = test_property::none);
+						  const test_config &t_cfg = {});
 
 			void add_test(void (*func)(),
-						  std::string_view name,
-						  std::string_view tag = {},
-						  std::string_view group = {},
-						  hrs::flags<test_property> properties = test_property::none);
+						  const test_config &t_cfg = {});
 
 			void run();
 
-			void set_config(test_config &&cfg) noexcept;
+			void set_config(config &&_cfg) noexcept;
 
-			static test_environment & get_global_environment();
+			static environment & get_global_environment();
 
 			static void DEFAULT_OUTPUT(std::size_t global_num,
 									   std::size_t num_within_group,
@@ -188,7 +183,7 @@ namespace hrs
 		private:
 			void add_test(test_data &&test, std::string_view group);
 		private:
-			test_config config;
+			config cfg;
 			tests_t tests;
 
 		};
