@@ -27,10 +27,10 @@ Hrs
 		demangle.hpp
 		dynamic_library.hpp
 		variadic.hpp
-		#multikey_map.hpp
 		one_of.hpp
 		distinct.hpp
 		copy_traits.hpp
+		on_thread_exit.hpp
 )
 
 if(UNIX)

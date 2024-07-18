@@ -3,6 +3,8 @@
 #include <memory>
 #include "entry.hpp"
 
+#include "../debug.hpp"
+
 namespace hrs
 {
 	template<typename V, typename A, type_instantiation<key> CKey, type_instantiation<key> ...CKeys>
@@ -186,6 +188,9 @@ namespace hrs
 			requires std::same_as<std::remove_cv_t<M>, basic_multikey_map>
 		void erase(const detail::iterator<Index, M> it) noexcept
 		{
+			hrs::assert_true_debug(hrs::is_iterator_part_of_range_debug(get_entry<Index>(), it),
+								   "Requested for erasure iterator is not a part of this map/entry!");
+
 			if(it == get_entry<Index>().end())
 				return;
 
