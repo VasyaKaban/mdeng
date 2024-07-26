@@ -31,6 +31,7 @@ Hrs
 		distinct.hpp
 		copy_traits.hpp
 		on_thread_exit.hpp
+		swap_back_pop.hpp
 )
 
 if(UNIX)

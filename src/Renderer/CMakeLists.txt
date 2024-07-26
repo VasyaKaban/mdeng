@@ -9,26 +9,30 @@ target_sources(
 	Renderer
 	    PRIVATE
 		Vulkan/VulkanInclude.h
-		Vulkan/VulkanLoaderGenBegin.h
-		Vulkan/VulkanLoaderGenEnd.h
+		Vulkan/VkResultMeta.hpp
+		Vulkan/codegen/loader_gen_decl.h
+		Vulkan/codegen/loader_gen_def.h
+		Vulkan/codegen/loader_wsi_gen_def.h
+		Vulkan/codegen/loader_wsi_gen_undef.h
+		Vulkan/codegen/im_loader_gen_decl.h
+		Vulkan/codegen/im_loader_gen_def.h
+		Vulkan/codegen/im_loader_wsi_gen_def.h
+		Vulkan/codegen/im_loader_wsi_gen_undef.h
 )
 
 target_sources(
 	Renderer
 	    PRIVATE
-		Context/VulkanLibrary.h
-		Context/VulkanLibrary.cpp
+		Context/Context.h
+		Context/Context.cpp
 		Context/GlobalLoader.h
 		Context/GlobalLoader.cpp
 		Context/InstanceLoader.h
 		Context/InstanceLoader.cpp
-		Context/Context.h
-		Context/Context.cpp
-		Context/Device.h
-		Context/Device.cpp
-		Context/DeviceLoader.h
-		Context/DeviceLoader.cpp
-		Context/DeviceWorker.h
+		Context/DeviceUtilizer.h
+
+		Context/codegen/GlobalLoader_gen.h
+		Context/codegen/InstanceLoader_gen.h
 )
 
 

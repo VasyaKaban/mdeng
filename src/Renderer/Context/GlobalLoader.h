@@ -1,21 +1,12 @@
 #pragma once
-
-#include <type_traits>
+#include "codegen/GlobalLoader_gen.h"
+#include <optional>
 #include "../Vulkan/VulkanInclude.h"
-#include "../Vulkan/VulkanLoaderGenBegin.h"
 
 namespace FireLand
 {
-	struct GlobalLoader
-	{
-		FIRE_LAND_DECL_VK_FUNCTION(GetInstanceProcAddr)
-		FIRE_LAND_DECL_VK_FUNCTION(CreateInstance)
-		FIRE_LAND_DECL_VK_FUNCTION(EnumerateInstanceExtensionProperties)
-		FIRE_LAND_DECL_VK_FUNCTION(EnumerateInstanceLayerProperties)
-		FIRE_LAND_DECL_VK_FUNCTION(EnumerateInstanceVersion)
-
-		bool Init(PFN_vkGetInstanceProcAddr global_vkGetInstanceProcAddr) noexcept;
-	};
+#include "../Vulkan/codegen/loader_gen_decl.h"
 };
 
-#include "../Vulkan/VulkanLoaderGenEnd.h"
+#undef LOADER_GEN_TYPE
+#undef LOADER_GEN_LIST

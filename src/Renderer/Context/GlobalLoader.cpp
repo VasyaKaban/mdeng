@@ -1,23 +1,11 @@
 #include "GlobalLoader.h"
-#include "../Vulkan/VulkanLoaderGenBegin.h"
+#include "codegen/GlobalLoader_gen.h"
+#include <bit>
 
 namespace FireLand
 {
-	bool GlobalLoader::Init(PFN_vkGetInstanceProcAddr global_vkGetInstanceProcAddr) noexcept
-	{
-		GetInstanceProcAddr = global_vkGetInstanceProcAddr;
-		if(!GetInstanceProcAddr)
-			return false;
-
-		FIRE_LAND_RESOLVE_VK_FUNCTION_COND(GetInstanceProcAddr, VK_NULL_HANDLE, CreateInstance, false)
-
-		FIRE_LAND_RESOLVE_VK_FUNCTION(GetInstanceProcAddr, VK_NULL_HANDLE, EnumerateInstanceExtensionProperties)
-		FIRE_LAND_RESOLVE_VK_FUNCTION(GetInstanceProcAddr, VK_NULL_HANDLE, EnumerateInstanceLayerProperties)
-		FIRE_LAND_RESOLVE_VK_FUNCTION(GetInstanceProcAddr, VK_NULL_HANDLE, EnumerateInstanceVersion)
-
-		return true;
-	}
+#include "../Vulkan/codegen/loader_gen_def.h"
 };
 
-#include "../Vulkan/VulkanLoaderGenEnd.h"
-
+#undef LOADER_GEN_TYPE
+#undef LOADER_GEN_LIST

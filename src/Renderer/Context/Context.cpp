@@ -1,11 +1,20 @@
 #include "Context.h"
-#include "VulkanLibrary.h"
+#include "hrs/scoped_call.hpp"
+#include "hrs/swap_back_pop.hpp"
 
 namespace FireLand
 {
+	Context::Context(hrs::dynamic_library &&_vk_library,
+					 const char * const _vk_libary_name,
+					 const GlobalLoader &_global_loader)
+		: vk_library(std::move(_vk_library)),
+		  vk_library_name(_vk_libary_name),
+		  global_loader(_global_loader),
+		  instance(VK_NULL_HANDLE)
+	{}
+
 	Context::Context() noexcept
-		: parent_library(nullptr),
-		  handle(VK_NULL_HANDLE) {}
+		: instance(VK_NULL_HANDLE) {}
 
 	Context::~Context()
 	{
@@ -13,158 +22,226 @@ namespace FireLand
 	}
 
 	Context::Context(Context &&ctx) noexcept
-		: parent_library(ctx.parent_library),
-		  handle(std::exchange(ctx.handle, VK_NULL_HANDLE)),
+		: vk_library(std::move(ctx.vk_library)),
+		  vk_library_name(std::move(ctx.vk_library_name)),
+		  global_loader(ctx.global_loader),
+		  instance(std::exchange(ctx.instance, VK_NULL_HANDLE)),
+		  instance_loader(ctx.instance_loader),
 		  physical_devices(std::move(ctx.physical_devices)),
 		  surfaces(std::move(ctx.surfaces)),
-		  devices(std::move(ctx.devices)),
-		  loader(ctx.loader),
-		  allocation_cbacks(ctx.allocation_cbacks) {}
+		  debug_messengers(std::move(ctx.debug_messengers)),
+		  device_utilizers(std::move(ctx.device_utilizers)),
+		  allocation_callbacks(ctx.allocation_callbacks) {}
 
 	Context & Context::operator=(Context &&ctx) noexcept
 	{
 		Destroy();
 
-		parent_library = ctx.parent_library;
-		handle = std::exchange(ctx.handle, VK_NULL_HANDLE);
+		vk_library = std::move(ctx.vk_library);
+		vk_library_name = std::move(ctx.vk_library_name);
+		global_loader = ctx.global_loader;
+		instance = std::exchange(ctx.instance, VK_NULL_HANDLE);
+		instance_loader = ctx.instance_loader;
 		physical_devices = std::move(ctx.physical_devices);
 		surfaces = std::move(ctx.surfaces);
-		devices = std::move(ctx.devices);
-		loader = ctx.loader;
-		allocation_cbacks = ctx.allocation_cbacks;
+		debug_messengers = std::move(ctx.debug_messengers);
+		device_utilizers = std::move(ctx.device_utilizers);
+		allocation_callbacks = ctx.allocation_callbacks;
 
 		return *this;
 	}
 
-	VkResult Context::Init(VulkanLibrary *_parent_library,
-						   VkInstance _handle,
-						   std::shared_ptr<VkAllocationCallbacks> _allocation_cbacks)
+	hrs::expected<Context, VkResult> Context::Init(std::span<const char * const> library_names)
 	{
-		if(!_parent_library || _handle == VK_NULL_HANDLE)
-			return VK_ERROR_INITIALIZATION_FAILED;
-
-		Destroy();
-
-		bool loader_res = loader.Init(_handle, _parent_library->GetResolver());
-		if(!loader_res)
-			return VK_ERROR_INITIALIZATION_FAILED;
-
-		std::vector<VkPhysicalDevice> _physcial_devices;
-		if(loader.EnumeratePhysicalDevices)
+		hrs::dynamic_library lib;
+		for(const auto &name : library_names)
 		{
-			std::uint32_t physical_device_count = 0;
-			VkResult res = loader.EnumeratePhysicalDevices(_handle, &physical_device_count, nullptr);
+			bool open_res = lib.open(name);
+			if(!open_res)
+				continue;
+
+			auto global_vkGetInstanceProcAddr =
+				lib.get_ptr<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
+			if(!global_vkGetInstanceProcAddr)
+				continue;
+
+			GlobalLoader _global_loader;
+			auto loader_opt = _global_loader.Init(global_vkGetInstanceProcAddr);
+			if(!loader_opt)
+				continue;
+
+			return Context(std::move(lib), name, _global_loader);
+		}
+
+		return VK_ERROR_INITIALIZATION_FAILED;
+	}
+
+	VkResult Context::Create(const VkInstanceCreateInfo &info,
+							 const VkAllocationCallbacks *_allocation_callbacks)
+	{
+		if(IsCreated())
+			return VK_SUCCESS;
+
+		hrs::assert_true_debug(IsInitialized(), "Context (Vulkan library) isn't initialized yet!");
+		if(!global_loader.vkCreateInstance)
+			return VK_ERROR_INITIALIZATION_FAILED;
+
+		VkInstance _instance;
+		VkResult res = global_loader.vkCreateInstance(&info, _allocation_callbacks, &_instance);
+		if(res != VK_SUCCESS)
+			return res;
+
+		InstanceLoader _instance_loader;
+		auto instance_loader_opt = _instance_loader.Init(_instance, global_loader.vkGetInstanceProcAddr);
+		if(!instance_loader_opt)
+		{
+			//VkInstance LEAK!!!
+			return VK_ERROR_INITIALIZATION_FAILED;
+		}
+
+		hrs::scoped_call instance_dtor([_instance, &_instance_loader, _allocation_callbacks]()
+		{
+			if(_instance_loader.vkDestroyInstance)
+				_instance_loader.vkDestroyInstance(_instance, _allocation_callbacks);
+		});
+
+		std::vector<VkPhysicalDevice> _physical_devices;
+		if(_instance_loader.vkEnumeratePhysicalDevices)
+		{
+			std::uint32_t physical_count = 0;
+			VkResult res = _instance_loader.vkEnumeratePhysicalDevices(_instance, &physical_count, nullptr);
 			if(res != VK_SUCCESS)
 				return res;
 
-			_physcial_devices.resize(physical_device_count);
-			res = loader.EnumeratePhysicalDevices(_handle, &physical_device_count, _physcial_devices.data());
+			_physical_devices.resize(physical_count);
+			res = _instance_loader.vkEnumeratePhysicalDevices(_instance, &physical_count, _physical_devices.data());
 			if(res != VK_SUCCESS)
 				return res;
 		}
 
-		parent_library = _parent_library;
-		handle = _handle;
-		physical_devices = std::move(_physcial_devices);
-		allocation_cbacks = _allocation_cbacks;
+		instance = _instance;
+		instance_loader = _instance_loader;
+		physical_devices = std::move(_physical_devices);
+		if(_allocation_callbacks)
+			allocation_callbacks = *_allocation_callbacks;
+
+		instance_dtor.drop();
 		return VK_SUCCESS;
 	}
 
 	void Context::Destroy() noexcept
 	{
-		if(!IsCreated())
-			return;
-
-		devices = decltype(devices){};
-		if(loader.DestroySurfaceKHR)//MAY LEAK OTHERWISE
-			for(auto surf : surfaces)
-				loader.DestroySurfaceKHR(handle, surf, allocation_cbacks.get());
-
-		surfaces = decltype(surfaces){};
-		physical_devices = decltype(physical_devices){};
-
-
-		if(loader.DestroyInstance)//MAY LEAK OTHERWISE
-			loader.DestroyInstance(handle, allocation_cbacks.get());
-
-		allocation_cbacks.reset();
-	}
-
-	hrs::expected<Device *, VkResult>
-	Context::CreateDevice(const VkDeviceCreateInfo &info,
-						  VkPhysicalDevice physical_device,
-						  std::shared_ptr<VkAllocationCallbacks> _allocation_callbacks)
-	{
-		if(!IsCreated())
-			return VK_ERROR_INITIALIZATION_FAILED;
-
-		if(std::ranges::find(physical_devices, physical_device) == physical_devices.end())
-			return VK_ERROR_INITIALIZATION_FAILED;
-
-		VkDevice _device;
-		VkResult res = loader.CreateDevice(physical_device, &info, allocation_cbacks.get(), &_device);
-		if(res != VK_SUCCESS)
-			return res;
-
-		Device device;
-		res = device.Init(this, _device, physical_device, _allocation_callbacks);
-		if(res != VK_SUCCESS)
+		if(IsCreated())
 		{
-			loader.DestroyDevice(_device, allocation_cbacks.get());
-			return res;
+			device_utilizers.clear();
+			if(instance_loader.vkDestroyDebugUtilsMessengerEXT)
+			{
+				for(const auto messenger : debug_messengers)
+					instance_loader.vkDestroyDebugUtilsMessengerEXT(instance, messenger, GetAllocationCallbacks());
+			}
+			debug_messengers.clear();
+			//else
+			//	MSG: VkDebugMessengerEXT LEAK!!!
+			if(instance_loader.vkDestroySurfaceKHR)
+			{
+				for(const auto surface : surfaces)
+					instance_loader.vkDestroySurfaceKHR(instance, surface, GetAllocationCallbacks());
+			}
+			surfaces.clear();
+			//else
+			//	MSG: VkSurfaceKHR LEAK!!!
+			physical_devices.clear();
+			if(instance_loader.vkDestroyInstance)
+				instance_loader.vkDestroyInstance(instance, GetAllocationCallbacks());
+
+			instance = VK_NULL_HANDLE;
+			//else
+			//	MSG: VkInstance LEAK!!!
+			allocation_callbacks.reset();
 		}
 
-		devices.push_back(std::move(device));
-		return &devices.back();
+		if(IsInitialized())
+			vk_library.close();
 	}
 
-	void Context::DestroyDevice(const Device &device) noexcept
+	void Context::AddSurface(VkSurfaceKHR surface)
 	{
-		if(auto it = std::ranges::find(devices, device); it != devices.end())
-			devices.erase(it);
+		if(surface == VK_NULL_HANDLE)
+			return;
+
+		surfaces.push_back(surface);
 	}
 
-	bool Context::IsCreated() const noexcept
+	void Context::DestroySurface(VkSurfaceKHR surface) noexcept
 	{
-		return handle != VK_NULL_HANDLE;
+		auto it = std::ranges::find_if(surfaces, [surface](VkSurfaceKHR sur)
+		{
+			return sur == surface;
+		});
+
+		if(it != surfaces.end())
+			hrs::swap_back_pop(surfaces, it);
 	}
 
-	Context::operator bool() const noexcept
+	hrs::expected<VkDebugUtilsMessengerEXT, VkResult>
+	Context::CreateDebugMessenger(const VkDebugUtilsMessengerCreateInfoEXT &info)
 	{
-		return IsCreated();
+		hrs::assert_true_debug(IsCreated(), "Context isn't created yet!");
+
+		if(!instance_loader.vkCreateDebugUtilsMessengerEXT)
+			return VK_ERROR_INITIALIZATION_FAILED;
+
+		VkDebugUtilsMessengerEXT messenger;
+		VkResult res =
+			instance_loader.vkCreateDebugUtilsMessengerEXT(instance, &info, GetAllocationCallbacks(), &messenger);
+
+		if(res != VK_SUCCESS)
+			return res;
+
+		debug_messengers.push_back(messenger);
+		return messenger;
 	}
 
-	bool Context::operator==(const Context &ctx) const noexcept
+	void Context::DestroyDebugMessenger(VkDebugUtilsMessengerEXT messenger) noexcept
 	{
-		return parent_library == ctx.parent_library && handle == ctx.handle;
+		auto it = std::ranges::find_if(debug_messengers, [messenger](VkDebugUtilsMessengerEXT mes)
+		{
+			return mes == messenger;
+		});
+
+		if(it != debug_messengers.end())
+			hrs::swap_back_pop(debug_messengers, it);
 	}
 
-	PFN_vkVoidFunction Context::GetProcAddressRaw(const char *name) const noexcept
+	void Context::DestroyDeviceUtilizer(DeviceUtilizer *du) noexcept
 	{
-		if(!IsCreated())
-			return nullptr;
+		auto it = std::ranges::find_if(device_utilizers, [du](const std::unique_ptr<DeviceUtilizer> &udu)
+		{
+			return du == udu.get();
+		});
 
-		return loader.GetInstanceProcAddr(handle, name);
+		if(it != device_utilizers.end())
+			hrs::swap_back_pop(device_utilizers, it);
 	}
 
-	const InstanceLoader & Context::GetLoader() const noexcept
+	const GlobalLoader & Context::GetGlobalLoader() const noexcept
 	{
-		return loader;
+		return global_loader;
 	}
 
-	VulkanLibrary * Context::GetLibrary() noexcept
+	const InstanceLoader & Context::GetInstanceLoader() const noexcept
 	{
-		return parent_library;
+		return instance_loader;
 	}
 
-	const VulkanLibrary * Context::GetLibrary() const noexcept
+	const std::string & Context::GetVulkanLibraryName() const noexcept
 	{
-		return parent_library;
+		return vk_library_name;
 	}
 
 	VkInstance Context::GetHandle() const noexcept
 	{
-		return handle;
+		return instance;
 	}
 
 	const std::vector<VkPhysicalDevice> & Context::GetPhysicalDevices() const noexcept
@@ -177,18 +254,36 @@ namespace FireLand
 		return surfaces;
 	}
 
-	std::vector<Device> & Context::GetDevices() noexcept
+	const std::vector<VkDebugUtilsMessengerEXT> & Context::GetDebugMessengers() const noexcept
 	{
-		return devices;
+		return debug_messengers;
 	}
 
-	const std::vector<Device> & Context::GetDevices() const noexcept
+	const std::vector<std::unique_ptr<DeviceUtilizer>> & Context::GetDeviceUtilizers() const noexcept
 	{
-		return devices;
+		return device_utilizers;
 	}
 
-	std::shared_ptr<VkAllocationCallbacks> Context::GetAllocatorCallbacks() const noexcept
+	std::vector<std::unique_ptr<DeviceUtilizer>> & Context::GetDeviceUtilizers() noexcept
 	{
-		return allocation_cbacks;
+		return device_utilizers;
+	}
+
+	const VkAllocationCallbacks * Context::GetAllocationCallbacks() const noexcept
+	{
+		if(allocation_callbacks)
+			return &*allocation_callbacks;
+
+		return nullptr;
+	}
+
+	bool Context::IsInitialized() const noexcept
+	{
+		return vk_library.is_open();
+	}
+
+	bool Context::IsCreated() const noexcept
+	{
+		return instance != VK_NULL_HANDLE;
 	}
 };

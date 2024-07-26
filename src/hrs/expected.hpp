@@ -22,24 +22,20 @@ namespace hrs
 			: is_error(false) {}
 
 		template<typename U = T>
-			requires std::assignable_from<T &, U>
-		constexpr expected(U &&val) noexcept(std::is_nothrow_assignable_v<T &, U>)
-		{
-			is_error = false;
-			data.value = std::forward<U>(val);
-		}
+			requires std::constructible_from<T, U>
+		constexpr expected(U &&val) noexcept(std::is_nothrow_constructible_v<T, U>)
+			: data(std::forward<U>(val)),
+			  is_error(false) {}
 
 		template<typename U = E>
-			requires std::assignable_from<E &, U> && (!std::assignable_from<T &, U>)
-		constexpr expected(U &&err) noexcept(std::is_nothrow_assignable_v<E &, U>)
-		{
-			is_error = true;
-			data.error = std::forward<U>(err);
-		}
+			requires std::constructible_from<E, U> && (!std::constructible_from<T, U>)
+		constexpr expected(U &&err) noexcept(std::is_nothrow_constructible_v<E, U>)
+			: data(std::forward<U>(err)),
+			  is_error(false) {}
 
 		template<typename U = E>
 			requires std::assignable_from<E &, U>
-		constexpr expected(unexpected_t _, U &&err) noexcept(std::is_nothrow_assignable_v<E &, U>)
+		constexpr expected(U &&err, unexpected_t _) noexcept(std::is_nothrow_assignable_v<E &, U>)
 		{
 			is_error = true;
 			data.error = std::forward<U>(err);
@@ -294,10 +290,22 @@ namespace hrs
 			T value;
 			E error;
 
-			constexpr expected_data() noexcept/*(std::is_nothrow_default_constructible_v<T>)*/
-				/*requires std::is_default_constructible_v<T>*/ {}
+			constexpr expected_data() noexcept(std::is_nothrow_default_constructible_v<T>)
+				requires std::is_default_constructible_v<T>
+				: value{} {}
 
 			constexpr ~expected_data() {}
+
+			template<typename U = T>
+				requires std::constructible_from<T, U>
+			constexpr expected_data(U &&val) noexcept(std::is_nothrow_constructible_v<T, U>)
+				: value(std::forward<U>(val)) {}
+
+			template<typename U = E>
+				requires std::constructible_from<E, U> && (!std::constructible_from<T, U>)
+			constexpr expected_data(U &&err) noexcept(std::is_nothrow_constructible_v<E, U>)
+				: error(std::forward<U>(err)) {}
+
 		} data;
 		bool is_error;
 	};
