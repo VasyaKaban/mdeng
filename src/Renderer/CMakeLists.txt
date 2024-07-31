@@ -9,15 +9,13 @@ target_sources(
 	Renderer
 	    PRIVATE
 		Vulkan/VulkanInclude.h
+		Vulkan/LoaderInitResult.h
+		Vulkan/LoaderInitResult.cpp
+		Vulkan/InitResult.h
+		Vulkan/InitResult.cpp
 		Vulkan/VkResultMeta.hpp
 		Vulkan/codegen/loader_gen_decl.h
 		Vulkan/codegen/loader_gen_def.h
-		Vulkan/codegen/loader_wsi_gen_def.h
-		Vulkan/codegen/loader_wsi_gen_undef.h
-		Vulkan/codegen/im_loader_gen_decl.h
-		Vulkan/codegen/im_loader_gen_def.h
-		Vulkan/codegen/im_loader_wsi_gen_def.h
-		Vulkan/codegen/im_loader_wsi_gen_undef.h
 )
 
 target_sources(
@@ -35,20 +33,29 @@ target_sources(
 		Context/codegen/InstanceLoader_gen.h
 )
 
+target_sources(
+	Renderer
+	    PRIVATE
+		Allocator/AllocatorLoader.h
+		Allocator/AllocatorLoader.cpp
+		Allocator/AllocatorResult.h
+		Allocator/Memory.h
+		Allocator/Memory.cpp
+		Allocator/MemoryPool.h
+		Allocator/MemoryPool.cpp
+		Allocator/MemoryPoolLists.h
+		Allocator/MemoryPoolLists.cpp
+		Allocator/MemoryType.h
+		Allocator/MemoryType.cpp
+		Allocator/Allocator.h
+		Allocator/Allocator.cpp
+		Allocator/Bounded.h
+		Allocator/Bounded.cpp
+		Allocator/BoundedSize.h
+		Allocator/BoundedSize.cpp
 
-set(ALLOCATOR_FOLDER_SOURCES
-	Allocator/Memory.h
-	Allocator/Memory.cpp
-	Allocator/MemoryPool.h
-	Allocator/MemoryPool.cpp
-	Allocator/MemoryPoolLists.h
-	Allocator/MemoryPoolLists.cpp
-	Allocator/MemoryType.h
-	Allocator/MemoryType.cpp
-	Allocator/Allocator.h
-	Allocator/Allocator.cpp
-	Allocator/AllocateFromMany.hpp
-	Allocator/BoundedResourceSize.hpp)
+		Allocator/codegen/AllocatorLoader_gen.h
+)
 
 set(TRANSFER_CHANNEL_FOLDER_SOURCES
 	TransferChannel/TransferChannel.h

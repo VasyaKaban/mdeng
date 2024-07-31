@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../Vulkan/VulkanInclude.hpp"
+#include "../Vulkan/VulkanInclude.h"
 #include "hrs/non_creatable.hpp"
 #include "hrs/flags.hpp"
 #include "hrs/error.hpp"
@@ -14,7 +14,6 @@
 namespace FireLand
 {
 	class MemoryPool;
-	enum class MemoryPoolResult;
 	enum class ResourceType;
 
 	enum class MemoryPoolOnEmptyPolicy
@@ -31,123 +30,123 @@ namespace FireLand
 		CreateOnExistedPools = 1 << 3
 	};
 
-	struct BlockBindPool
+	enum class MemoryTypeSatisfyOp
 	{
-		hrs::block<vk::DeviceSize> block;
+		Any,
+		Only
+	};
+
+	struct MemoryTypeAcquireResult
+	{
+		hrs::block<VkDeviceSize> block;
 		MemoryPoolLists::Iterator pool;
 
-		BlockBindPool(const hrs::block<vk::DeviceSize> &_block = {}, MemoryPoolLists::Iterator _pool = {}) noexcept
+		MemoryTypeAcquireResult(const hrs::block<VkDeviceSize> &_block = {}, MemoryPoolLists::Iterator _pool = {}) noexcept
 			: block(_block), pool(_pool) {}
-		BlockBindPool(const BlockBindPool &) = default;
-		BlockBindPool & operator=(const BlockBindPool &) = default;
+		MemoryTypeAcquireResult(const MemoryTypeAcquireResult &) = default;
+		MemoryTypeAcquireResult & operator=(const MemoryTypeAcquireResult &) = default;
 	};
 
 	class MemoryType;
 
 	//return value must be greater or equal to requested_size if it's supposed to be a good allocation size
 	//otherwise it's supposed to be an allocation failure
-	using NewPoolSizeCalculator = vk::DeviceSize(vk::DeviceSize /*previous_size -> 0 on first call, returned value for next calls*/,
-												 vk::DeviceSize /*requested_size -> requested size for allocation(passes on first call)*/,
-												 const MemoryType & /*mem_type -> memory type where pool wiil be placed*/);
+	using NewPoolSizeCalculator =
+		VkDeviceSize(bool, /*initial -> true if it first call to this fucntion*/
+					 VkDeviceSize /*previous_size -> returned value for next calls*/,
+					 VkDeviceSize /*requested_size -> requested size for allocation(passes on first call)*/,
+					 const MemoryType & /*mem_type -> memory type where pool wiil be placed*/);
 
 
-	class MemoryType : public hrs::non_copyable
+	class MemoryType
+		: public hrs::non_copyable,
+		  public hrs::non_move_assignable
 	{
 	public:
 
 		using PoolContainer = std::list<MemoryPool>;
 
-		static vk::DeviceSize DefaultNewPoolSizeCalculator(vk::DeviceSize previous_size,
-														   vk::DeviceSize requested_size,
-														   const MemoryType &mem_type) noexcept;
+		static VkDeviceSize DefaultNewPoolSizeCalculator(bool initial,
+														 VkDeviceSize previous_size,
+														 VkDeviceSize requested_size,
+														 const MemoryType &mem_type) noexcept;
 
-		MemoryType(vk::Device _parent_device,
-				   vk::MemoryHeap _heap,
-				   vk::MemoryPropertyFlags _memory_property_flags,
+		MemoryType(VkMemoryHeap _heap,
+				   VkMemoryPropertyFlags _memory_property_flags,
 				   std::uint32_t _index,
-				   vk::DeviceSize _buffer_image_granularity) noexcept;
+				   VkDeviceSize _buffer_image_granularity) noexcept;
 
-		~MemoryType();
+		~MemoryType() = default;
 		MemoryType(MemoryType &&mem_type) noexcept;
-		MemoryType & operator=(MemoryType &&mem_type) noexcept;
 
-		void Destroy();
+		void Destroy(VkDevice device, const AllocatorLoader &al, const VkAllocationCallbacks *alc) noexcept;
 
-		bool IsSatisfy(const vk::MemoryRequirements &req) const noexcept;
-		bool IsSatisfyAny(vk::MemoryPropertyFlags props) const noexcept;
-		bool IsSatisfyOnly(vk::MemoryPropertyFlags props) const noexcept;
+		bool IsSatisfy(MemoryTypeSatisfyOp satisfy, VkMemoryPropertyFlags props) const noexcept;
+		bool IsSatisfyIndex(std::uint32_t memory_type_bits) const noexcept;
 		bool IsMappable() const noexcept;
 		bool IsEmpty() const noexcept;
 
 		std::uint32_t GetMemoryTypeIndex() const noexcept;
 		std::uint32_t GetMemoryTypeIndexMask() const noexcept;
 
-		hrs::expected<BlockBindPool, hrs::error>
-		Bind(vk::Buffer buffer,
-			 const vk::MemoryRequirements &req,
-			 hrs::flags<AllocationFlags> flags = {},
-			 const std::function<NewPoolSizeCalculator> &calc = DefaultNewPoolSizeCalculator);
+		hrs::expected<MemoryTypeAcquireResult, hrs::error>
+		Allocate(ResourceType res_type,
+				 const VkMemoryRequirements &req,
+				 hrs::flags<AllocationFlags> flags,
+				 VkDevice device,
+				 const AllocatorLoader &al,
+				 const VkAllocationCallbacks *alc,
+				 const std::function<NewPoolSizeCalculator> &calc = DefaultNewPoolSizeCalculator);
 
-		hrs::expected<BlockBindPool, hrs::error>
-		Bind(vk::Image image,
-			 ResourceType res_type,
-			 const vk::MemoryRequirements &req,
-			 hrs::flags<AllocationFlags> flags = {},
-			 const std::function<NewPoolSizeCalculator> &calc = DefaultNewPoolSizeCalculator);
+		hrs::expected<MemoryTypeAcquireResult, hrs::error>
+		TryAcquire(ResourceType res_type,
+				   const VkMemoryRequirements &req,
+				   hrs::flags<AllocationFlags> flags,
+				   VkDevice device,
+				   const AllocatorLoader &al,
+				   const VkAllocationCallbacks *alc,
+				   const std::function<NewPoolSizeCalculator> &calc = DefaultNewPoolSizeCalculator);
+
+		hrs::expected<MemoryTypeAcquireResult, hrs::error>
+		TryAllocate(ResourceType res_type,
+					const VkMemoryRequirements &req,
+					hrs::flags<AllocationFlags> flags,
+					VkDevice device,
+					const AllocatorLoader &al,
+					const VkAllocationCallbacks *alc,
+					const std::function<NewPoolSizeCalculator> &calc = DefaultNewPoolSizeCalculator);
 
 		void Release(ResourceType res_type,
-					 const BlockBindPool &bbp,
-					 MemoryPoolOnEmptyPolicy policy);
-
-		void Release(vk::Buffer buffer,
-					 const BlockBindPool &bbp,
-					 MemoryPoolOnEmptyPolicy policy);
-
-		void Release(vk::Image image,
-					 ResourceType res_type,
-					 const BlockBindPool &bbp,
-					 MemoryPoolOnEmptyPolicy policy);
+					 const MemoryTypeAcquireResult &mtar,
+					 MemoryPoolOnEmptyPolicy policy,
+					 VkDevice device,
+					 const AllocatorLoader &al,
+					 const VkAllocationCallbacks *alc);
 
 	private:
-		hrs::expected<BlockBindPool, hrs::error>
-		bind(std::variant<vk::Buffer, vk::Image> resource,
-			 ResourceType res_type,
-			 const vk::MemoryRequirements &req,
-			 hrs::flags<AllocationFlags> flags,
-			 const std::function<NewPoolSizeCalculator> &calc);
-
-		hrs::expected<hrs::block<vk::DeviceSize>, hrs::error>
-		bind_to_pool(MemoryPool &pool,
-					 std::variant<vk::Buffer, vk::Image> resource,
-					 ResourceType res_type,
-					 const vk::MemoryRequirements &req);
-
-		hrs::expected<BlockBindPool, vk::Result>
-		allocate_and_bind(std::variant<vk::Buffer, vk::Image> resource,
-						  ResourceType res_type,
-						  const vk::MemoryRequirements &req,
-						  hrs::flags<AllocationFlags> flags,
-						  const std::function<NewPoolSizeCalculator> &calc);
-
-		hrs::expected<BlockBindPool, hrs::error>
-		bind_to_existed(std::variant<vk::Buffer, vk::Image> resource,
+		hrs::expected<MemoryTypeAcquireResult, hrs::error>
+		acquire_existed(MemoryPoolType pool_type,
 						ResourceType res_type,
-						const vk::MemoryRequirements &req,
-						hrs::flags<AllocationFlags> flags);
+						hrs::flags<AllocationFlags> flags,
+						const hrs::mem_req<VkDeviceSize> &mem_req,
+						VkDevice device,
+						const AllocatorLoader &al);
 
-		hrs::expected<BlockBindPool, hrs::error>
-		try_bind_to_existed_pools(MemoryPoolLists::PoolContainer &pools,
-								  MemoryPoolType pool_type,
-								  std::variant<vk::Buffer, vk::Image> resource,
-								  ResourceType res_type,
-								  const vk::MemoryRequirements &req);
+		hrs::expected<MemoryTypeAcquireResult, hrs::error>
+		allocate_pool_and_acquire(ResourceType res_type,
+								  const hrs::mem_req<VkDeviceSize> &req,
+								  hrs::flags<AllocationFlags> flags,
+								  VkDevice device,
+								  const AllocatorLoader &al,
+								  const VkAllocationCallbacks *alc,
+								  const std::function<NewPoolSizeCalculator> &calc);
+
 
 	private:
-		vk::Device parent_device;
-		vk::MemoryHeap heap;
-		vk::MemoryPropertyFlags memory_property_flags;
+		VkMemoryHeap heap;
+		VkMemoryPropertyFlags memory_property_flags;
 		std::uint32_t index;
-		vk::DeviceSize buffer_image_granularity = 1;
+		VkDeviceSize buffer_image_granularity;
 		MemoryPoolLists lists;
 	};
 };

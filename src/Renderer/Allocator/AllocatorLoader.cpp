@@ -1,5 +1,5 @@
-#include "GlobalLoader.h"
-#include "codegen/GlobalLoader_gen.h"
+#include "AllocatorLoader.h"
+#include "codegen/AllocatorLoader_gen.h"
 
 namespace FireLand
 {

@@ -31,7 +31,7 @@ namespace hrs
 			requires std::constructible_from<E, U> && (!std::constructible_from<T, U>)
 		constexpr expected(U &&err) noexcept(std::is_nothrow_constructible_v<E, U>)
 			: data(std::forward<U>(err)),
-			  is_error(false) {}
+			  is_error(true) {}
 
 		template<typename U = E>
 			requires std::assignable_from<E &, U>

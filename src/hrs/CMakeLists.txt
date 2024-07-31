@@ -15,7 +15,6 @@ Hrs
 		scoped_call.hpp
 		flags.hpp
 		non_creatable.hpp
-		iterator_for_each.hpp
 		error.hpp
 		instantiation.hpp
 		free_block_chain_base.hpp

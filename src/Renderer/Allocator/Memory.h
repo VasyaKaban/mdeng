@@ -1,42 +1,49 @@
 #pragma once
 
-#include "../Vulkan/VulkanInclude.hpp"
+#include "../Vulkan/VulkanInclude.h"
+#include <bit>
+#include "hrs/non_creatable.hpp"
 
 namespace FireLand
 {
-	struct Memory
+	class AllocatorLoader;
+
+	class Memory
+		: public hrs::non_copyable,
+		  public hrs::non_move_assignable
 	{
-		vk::DeviceMemory memory;
-		vk::DeviceSize size;
-		std::byte *map_ptr;
-
-		Memory(vk::DeviceMemory _memory = {}, vk::DeviceSize _size = {}, std::byte *_map_ptr = {}) noexcept;
+	public:
+		Memory(VkDeviceMemory _memory = VK_NULL_HANDLE,
+			   VkDeviceSize _size = 0,
+			   std::byte *_map_ptr = nullptr) noexcept;
 		~Memory() = default;
-		Memory(const Memory &) = default;
 		Memory(Memory &&mem) noexcept;
-		Memory & operator=(const Memory &) = default;
-		Memory & operator=(Memory &&mem) noexcept;
 
-		void Free(vk::Device device) noexcept;
+		void Free(VkDevice device, const AllocatorLoader &al, const VkAllocationCallbacks *alc) noexcept;
 
 		bool IsAllocated() const noexcept;
 		bool IsMapped() const noexcept;
 
-		vk::DeviceMemory GetDeviceMemory() const noexcept;
-		vk::DeviceSize GetSize() const noexcept;
+		VkDeviceMemory GetDeviceMemory() const noexcept;
+		VkDeviceSize GetSize() const noexcept;
 
-		[[nodiscard]] vk::Result MapMemory(vk::Device device) noexcept;
+		VkResult MapMemory(VkDevice device, const AllocatorLoader &ld) noexcept;
 
 		template<typename T = std::byte>
-		constexpr T * GetMapPtr() noexcept
+		T * GetMapPtr() noexcept
 		{
 			return reinterpret_cast<T *>(map_ptr);
 		}
 
 		template<typename T = std::byte>
-		constexpr const T * GetMapPtr() const noexcept
+		const T * GetMapPtr() const noexcept
 		{
 			return reinterpret_cast<const T *>(map_ptr);
 		}
+
+	private:
+		VkDeviceMemory memory;
+		VkDeviceSize size;
+		std::byte *map_ptr;
 	};
 };

@@ -1,77 +1,63 @@
 #pragma once
 
-#include "../Vulkan/VulkanInclude.hpp"
+#include "../Vulkan/VulkanInclude.h"
 #include "hrs/non_creatable.hpp"
 #include "hrs/sized_free_block_chain.hpp"
 #include "hrs/error.hpp"
 #include "hrs/expected.hpp"
 #include "Memory.h"
+#include "AllocatorResult.h"
 
 namespace FireLand
 {
-	enum class MemoryPoolType
-	{
-		None = 0,
-		Linear,
-		NonLinear,
-		Mixed
-	};
-
 	enum class ResourceType
 	{
 		Linear,
 		NonLinear
 	};
 
-	constexpr MemoryPoolType ResourceTypeToMemoryPoolType(ResourceType res_type) noexcept
-	{
-		return (res_type == ResourceType::Linear ? MemoryPoolType::Linear : MemoryPoolType::NonLinear);
-	}
+	class AllocatorLoader;
 
-	enum class MemoryPoolResult
+	enum class MemoryPoolType
 	{
-		Success,
-		NotEnoughSpace
+		None = 0,
+		Linear = 1,
+		NonLinear = 2,
+		Mixed = 3,
+		MemoryPoolTypeMaxUnused
 	};
 
-	constexpr auto MemoryPoolResultToString(MemoryPoolResult res) noexcept
+	class MemoryPool
+		: public hrs::non_copyable,
+		  public hrs::non_move_assignable
 	{
-		switch(res)
-		{
-			case MemoryPoolResult::Success:
-				return "Success";
-				break;
-			case MemoryPoolResult::NotEnoughSpace:
-				return "NotEnoughSpace";
-				break;
-		}
-	}
-
-	class MemoryPool : public hrs::non_copyable
-	{
-		void init(Memory &&_memory,
-				  vk::DeviceSize _buffer_image_granularity,
-				  hrs::sized_free_block_chain<vk::DeviceSize> &&_free_blocks) noexcept;
-
+	private:
+		MemoryPool(VkDeviceSize _buffer_image_granularity,
+				   Memory &&_memory,
+				   hrs::sized_free_block_chain<VkDeviceSize> &&_free_blocks) noexcept;
 	public:
-		MemoryPool(vk::Device _parent_device) noexcept;
-		~MemoryPool();
+		MemoryPool() noexcept;
+		~MemoryPool() = default;
 		MemoryPool(MemoryPool &&pool) noexcept;
-		MemoryPool & operator=(MemoryPool &&pool) noexcept;
 
-		vk::Result Recreate(vk::DeviceSize size,
-							std::uint32_t memory_type_index,
-							bool map_memory,
-							vk::DeviceSize _buffer_image_granularity);
+		static MemoryPoolType ToMemoryPoolType(ResourceType res_type) noexcept;
+
+		static hrs::expected<MemoryPool, VkResult>
+		Create(VkDevice device,
+			   VkDeviceSize size,
+			   std::uint32_t memory_type_index,
+			   bool map_memory,
+			   VkDeviceSize _buffer_image_granularity,
+			   const AllocatorLoader &al,
+			   const VkAllocationCallbacks *alc);
 
 		bool IsCreated() const noexcept;
-		void Destroy() noexcept;
+		void Destroy(VkDevice device, const AllocatorLoader &al, const VkAllocationCallbacks *alc) noexcept;
 
 		Memory & GetMemory() noexcept;
 		const Memory & GetMemory() const noexcept;
-		vk::Device GetParentDevice() const noexcept;
 
-		vk::DeviceSize GetGranularity() const noexcept;
+		VkDeviceSize GetGranularity() const noexcept;
 		MemoryPoolType GetType() const noexcept;
 		bool IsGranularityFree() const noexcept;
 		bool IsEmpty() const noexcept;
@@ -79,20 +65,12 @@ namespace FireLand
 		std::size_t GetNonLinearObjectCount() const noexcept;
 		std::size_t GetLinearObjectCount() const noexcept;
 
-		vk::ResultValue<std::byte *> MapMemory() noexcept;
+		hrs::expected<std::byte *, VkResult> MapMemory(VkDevice device, const AllocatorLoader &al) noexcept;
 
-		void Release(ResourceType res_type, const hrs::block<vk::DeviceSize> &blk);
-		void Release(vk::Buffer buffer, const hrs::block<vk::DeviceSize> &blk);
-		void Release(vk::Image image, ResourceType res_type, const hrs::block<vk::DeviceSize> &blk);
+		hrs::expected<hrs::block<VkDeviceSize>, AllocatorResult>
+		Acquire(ResourceType res_type, const hrs::mem_req<VkDeviceSize> &req);
 
-		hrs::expected<hrs::block<vk::DeviceSize>, hrs::error>
-		Bind(vk::Buffer buffer,
-			 hrs::mem_req<vk::DeviceSize> req) noexcept;
-
-		hrs::expected<hrs::block<vk::DeviceSize>, hrs::error>
-		Bind(vk::Image image,
-			 ResourceType res_type,
-			 hrs::mem_req<vk::DeviceSize> req) noexcept;
+		void Release(ResourceType res_type, const hrs::block<VkDeviceSize> &blk) noexcept;
 
 	private:
 
@@ -100,38 +78,15 @@ namespace FireLand
 
 		void dec_count(ResourceType res_type) noexcept;
 
-		std::optional<hrs::block<vk::DeviceSize>>
+		std::optional<hrs::block<VkDeviceSize>>
 		acquire_block_based_on_granularity(ResourceType res_type,
-										   hrs::mem_req<vk::DeviceSize> req);
+										   hrs::mem_req<VkDeviceSize> req);
 
 	private:
-		vk::Device parent_device;
-		vk::DeviceSize buffer_image_granularity = 1;
-		std::size_t non_linear_object_count = {};
-		std::size_t linear_object_count = {};
+		VkDeviceSize buffer_image_granularity;
+		std::size_t non_linear_object_count;
+		std::size_t linear_object_count;
 		Memory memory;
-		hrs::sized_free_block_chain<vk::DeviceSize> free_blocks;
+		hrs::sized_free_block_chain<VkDeviceSize> free_blocks;
 	};
-};
-
-template<>
-struct hrs::enum_error_traits<FireLand::MemoryPoolResult>
-{
-	constexpr static void traits_hint() noexcept {};
-
-	constexpr static std::string_view get_name(FireLand::MemoryPoolResult value) noexcept
-	{
-		switch(value)
-		{
-			case FireLand::MemoryPoolResult::Success:
-				return "Success";
-				break;
-			case FireLand::MemoryPoolResult::NotEnoughSpace:
-				return "NotEnoughSpace";
-				break;
-			default:
-				return "";
-				break;
-		}
-	}
 };

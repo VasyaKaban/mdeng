@@ -10,6 +10,7 @@
 #include "GlobalLoader.h"
 #include "InstanceLoader.h"
 #include "DeviceUtilizer.h"
+#include "../Vulkan/InitResult.h"
 
 namespace FireLand
 {
@@ -35,19 +36,25 @@ namespace FireLand
 		Context(Context &&ctx) noexcept;
 		Context & operator=(Context &&ctx) noexcept;
 
-		static hrs::expected<Context, VkResult> Init(std::span<const char * const> library_names = DEFAULT_NAMES);
-		VkResult Create(const VkInstanceCreateInfo &info,
-						const VkAllocationCallbacks *_allocation_callbacks);
+		hrs::expected<std::uint32_t, VkResult> QueryVersion() const noexcept;
+
+		static hrs::expected<Context, InitResult>
+		Init(std::span<const char * const> library_names = DEFAULT_NAMES);
+
+		std::optional<InitResult> Create(const VkInstanceCreateInfo &info,
+										 const VkAllocationCallbacks *_allocation_callbacks);
 
 		void Destroy() noexcept;
 
 		void AddSurface(VkSurfaceKHR surface);
 		void DestroySurface(VkSurfaceKHR surface) noexcept;
+		void RemoveSurface(VkSurfaceKHR surface) noexcept;
 
 		hrs::expected<VkDebugUtilsMessengerEXT, VkResult>
 		CreateDebugMessenger(const VkDebugUtilsMessengerCreateInfoEXT &info);
 
 		void DestroyDebugMessenger(VkDebugUtilsMessengerEXT messenger) noexcept;
+		void RemoveDebugMessenger(VkDebugUtilsMessengerEXT messenger) noexcept;
 
 		void DestroyDeviceUtilizer(DeviceUtilizer *du) noexcept;
 
@@ -95,9 +102,6 @@ namespace FireLand
 		hrs::assert_true_debug(std::ranges::find(physical_devices, physical_device) != physical_devices.end(),
 							   "Passed physical device: {} is not a part of this context!",
 							   static_cast<void *>(physical_device));
-
-		hrs::assert_true(instance_loader.vkCreateDevice != nullptr,
-						 "Instance loader didn't load vkCreateDevice!");
 
 		VkDevice device;
 		VkResult res = instance_loader.vkCreateDevice(physical_device,

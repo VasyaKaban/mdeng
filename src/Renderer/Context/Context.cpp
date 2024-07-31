@@ -51,9 +51,27 @@ namespace FireLand
 		return *this;
 	}
 
-	hrs::expected<Context, VkResult> Context::Init(std::span<const char * const> library_names)
+	hrs::expected<std::uint32_t, VkResult> Context::QueryVersion() const noexcept
+	{
+		hrs::assert_true_debug(IsInitialized(), "Context (Vulkan library) isn't initialized yet!");
+
+		if(global_loader.vkEnumerateInstanceVersion)
+		{
+			std::uint32_t version;
+			VkResult res = global_loader.vkEnumerateInstanceVersion(&version);
+			if(res != VK_SUCCESS)
+				return res;
+
+			return version;
+		}
+
+		return VK_API_VERSION_1_0;
+	}
+
+	hrs::expected<Context, InitResult> Context::Init(std::span<const char * const> library_names)
 	{
 		hrs::dynamic_library lib;
+		InitResult result("vkGetInstanceProcAddr");
 		for(const auto &name : library_names)
 		{
 			bool open_res = lib.open(name);
@@ -66,25 +84,30 @@ namespace FireLand
 				continue;
 
 			GlobalLoader _global_loader;
-			auto loader_opt = _global_loader.Init(global_vkGetInstanceProcAddr);
-			if(!loader_opt)
+			auto loader_res = _global_loader.Init(global_vkGetInstanceProcAddr);
+			if(loader_res.IsFailure())
+			{
+				if(loader_res.IsLoaderFunctionFailure())
+					result = "vkGetInstanceProcAddr";
+				else
+					result = loader_res.GetRequiredFailureName();
+
 				continue;
+			}
 
 			return Context(std::move(lib), name, _global_loader);
 		}
 
-		return VK_ERROR_INITIALIZATION_FAILED;
+		return result;
 	}
 
-	VkResult Context::Create(const VkInstanceCreateInfo &info,
-							 const VkAllocationCallbacks *_allocation_callbacks)
+	std::optional<InitResult> Context::Create(const VkInstanceCreateInfo &info,
+											  const VkAllocationCallbacks *_allocation_callbacks)
 	{
 		if(IsCreated())
-			return VK_SUCCESS;
+			return {};
 
 		hrs::assert_true_debug(IsInitialized(), "Context (Vulkan library) isn't initialized yet!");
-		if(!global_loader.vkCreateInstance)
-			return VK_ERROR_INITIALIZATION_FAILED;
 
 		VkInstance _instance;
 		VkResult res = global_loader.vkCreateInstance(&info, _allocation_callbacks, &_instance);
@@ -92,32 +115,35 @@ namespace FireLand
 			return res;
 
 		InstanceLoader _instance_loader;
-		auto instance_loader_opt = _instance_loader.Init(_instance, global_loader.vkGetInstanceProcAddr);
-		if(!instance_loader_opt)
+		auto instance_loader_res = _instance_loader.Init(_instance, global_loader.vkGetInstanceProcAddr);
+		if(instance_loader_res.IsFailure())
 		{
-			//VkInstance LEAK!!!
-			return VK_ERROR_INITIALIZATION_FAILED;
+			if(_instance_loader.vkDestroyInstance)
+				_instance_loader.vkDestroyInstance(_instance, _allocation_callbacks);
+			//else
+				//VkInstance LEAK!!!
+
+			if(instance_loader_res.IsLoaderFunctionFailure())
+				return InitResult("vkGetInstanceProcAddr");
+			else
+				return instance_loader_res.GetRequiredFailureName();
 		}
 
 		hrs::scoped_call instance_dtor([_instance, &_instance_loader, _allocation_callbacks]()
 		{
-			if(_instance_loader.vkDestroyInstance)
-				_instance_loader.vkDestroyInstance(_instance, _allocation_callbacks);
+			_instance_loader.vkDestroyInstance(_instance, _allocation_callbacks);
 		});
 
 		std::vector<VkPhysicalDevice> _physical_devices;
-		if(_instance_loader.vkEnumeratePhysicalDevices)
-		{
-			std::uint32_t physical_count = 0;
-			VkResult res = _instance_loader.vkEnumeratePhysicalDevices(_instance, &physical_count, nullptr);
-			if(res != VK_SUCCESS)
-				return res;
+		std::uint32_t physical_count = 0;
+		res = _instance_loader.vkEnumeratePhysicalDevices(_instance, &physical_count, nullptr);
+		if(res != VK_SUCCESS)
+			return res;
 
-			_physical_devices.resize(physical_count);
-			res = _instance_loader.vkEnumeratePhysicalDevices(_instance, &physical_count, _physical_devices.data());
-			if(res != VK_SUCCESS)
-				return res;
-		}
+		_physical_devices.resize(physical_count);
+		res = _instance_loader.vkEnumeratePhysicalDevices(_instance, &physical_count, _physical_devices.data());
+		if(res != VK_SUCCESS)
+			return res;
 
 		instance = _instance;
 		instance_loader = _instance_loader;
@@ -126,7 +152,7 @@ namespace FireLand
 			allocation_callbacks = *_allocation_callbacks;
 
 		instance_dtor.drop();
-		return VK_SUCCESS;
+		return {};
 	}
 
 	void Context::Destroy() noexcept
@@ -151,12 +177,10 @@ namespace FireLand
 			//else
 			//	MSG: VkSurfaceKHR LEAK!!!
 			physical_devices.clear();
-			if(instance_loader.vkDestroyInstance)
-				instance_loader.vkDestroyInstance(instance, GetAllocationCallbacks());
 
+			instance_loader.vkDestroyInstance(instance, GetAllocationCallbacks());
 			instance = VK_NULL_HANDLE;
-			//else
-			//	MSG: VkInstance LEAK!!!
+
 			allocation_callbacks.reset();
 		}
 
@@ -173,6 +197,26 @@ namespace FireLand
 	}
 
 	void Context::DestroySurface(VkSurfaceKHR surface) noexcept
+	{
+		hrs::assert_true_debug(IsCreated(), "Context isn't created yet!");
+
+		auto it = std::ranges::find_if(surfaces, [surface](VkSurfaceKHR sur)
+		{
+			return sur == surface;
+		});
+
+		if(it != surfaces.end())
+		{
+			if(instance_loader.vkDestroySurfaceKHR)
+				instance_loader.vkDestroySurfaceKHR(instance, *it, GetAllocationCallbacks());
+			//else
+				//VkSurfaceKHR LEAK!!!
+
+			hrs::swap_back_pop(surfaces, it);
+		}
+	}
+
+	void Context::RemoveSurface(VkSurfaceKHR surface) noexcept
 	{
 		auto it = std::ranges::find_if(surfaces, [surface](VkSurfaceKHR sur)
 		{
@@ -203,6 +247,25 @@ namespace FireLand
 	}
 
 	void Context::DestroyDebugMessenger(VkDebugUtilsMessengerEXT messenger) noexcept
+	{
+		hrs::assert_true_debug(IsCreated(), "Context isn't created yet!");
+		auto it = std::ranges::find_if(debug_messengers, [messenger](VkDebugUtilsMessengerEXT mes)
+		{
+			return mes == messenger;
+		});
+
+		if(it != debug_messengers.end())
+		{
+			if(instance_loader.vkDestroyDebugUtilsMessengerEXT)
+				instance_loader.vkDestroyDebugUtilsMessengerEXT(instance, *it, GetAllocationCallbacks());
+			//else
+				//vkDestroyDebugUtilsMessengerEXT LEAK!!!
+
+			hrs::swap_back_pop(debug_messengers, it);
+		}
+	}
+
+	void Context::RemoveDebugMessenger(VkDebugUtilsMessengerEXT messenger) noexcept
 	{
 		auto it = std::ranges::find_if(debug_messengers, [messenger](VkDebugUtilsMessengerEXT mes)
 		{

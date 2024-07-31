@@ -1,6 +1,5 @@
 #include "InstanceLoader.h"
 #include "codegen/InstanceLoader_gen.h"
-#include <bit>
 
 namespace FireLand
 {
@@ -8,5 +7,4 @@ namespace FireLand
 };
 
 #undef INSTANCE_LOADER_DEBUG_FUNCTIONS
-#undef LOADER_GEN_TYPE
 #undef LOADER_GEN_LIST

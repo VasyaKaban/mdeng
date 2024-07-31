@@ -34,57 +34,44 @@ namespace hrs
 		}
 	};
 
-	template<typename E>
-		requires std::is_enum_v<E>
-	struct enum_error_traits
-	{
-		constexpr static std::string_view get_name(error_enum_value value) noexcept
-		{
-			return enum_meta<E>::get_name(value_to_enum<E>(value));
-		}
-	};
-
 	class error
 	{
 	public:
-
-		using traits_hint_type = std::string_view (*)(error_enum_value) noexcept;
-
 		constexpr error() noexcept
 			: value(0),
-			  traits_hint(nullptr) {}
+			  id(nullptr) {}
 
 		~error() = default;
 
 		template<typename E>
 			requires std::is_enum_v<E>
 		constexpr error(E e) noexcept
-			: value(enum_to_value(e)),
-			  traits_hint(enum_error_traits<E>::get_name) {}
+			: value(detail::enum_to_value(e)),
+			  id(&typeid(E)) {}
 
 		constexpr error(const error &) = default;
 		constexpr error & operator=(const error &) = default;
 
 		constexpr explicit operator bool() const noexcept
 		{
-			return traits_hint;
+			return id != nullptr;
 		}
 
 		constexpr bool is_empty() const noexcept
 		{
-			return traits_hint == nullptr;
+			return id == nullptr;
 		}
 
 		constexpr void clear() noexcept
 		{
-			traits_hint = nullptr;
+			id = nullptr;
 		}
 
 		template<typename E>
 			requires std::is_enum_v<E>
 		constexpr bool holds() const noexcept
 		{
-			return traits_hint == enum_error_traits<E>::get_name;
+			return *id == typeid(E);
 		}
 
 		template<typename E>
@@ -98,9 +85,10 @@ namespace hrs
 			requires std::is_enum_v<E>
 		constexpr std::string_view get_name() const noexcept
 		{
-			return (traits_hint == enum_error_traits<E>::get_name ?
-						enum_error_traits<E>::get_name(detail::value_to_enum<E>(value)) :
-						"");
+			if(*id == typeid(E))
+				return enum_meta<E>::get_name(detail::value_to_enum<E>(value));
+
+			return "";
 		}
 
 		constexpr error_enum_value get_raw_value() const noexcept
@@ -112,15 +100,20 @@ namespace hrs
 			requires std::is_enum_v<E>
 		constexpr bool operator==(E e) const noexcept
 		{
-			return (traits_hint == enum_error_traits<E>::get_name ? detail::value_to_enum<E>(value) == e : false);
+			if(holds<E>())
+				return detail::value_to_enum<E>(value) == e;
+
+			return false;
 		}
+
+		constexpr bool operator==(const error &) const = default;
 
 	private:
 
 		template<typename E, typename ...Enums, typename F>
 		constexpr bool visit_one(F &&f) const noexcept
 		{
-			if(enum_error_traits<E>::get_name == traits_hint)
+			if(*id == typeid(E))
 			{
 				if constexpr(std::invocable<F, E>)
 					std::forward<F>(f)(detail::value_to_enum<E>(value));
@@ -144,10 +137,10 @@ namespace hrs
 				std::invocable<F>)
 		constexpr void visit(F &&f) const noexcept
 		{
-			//if traits_hint == nullptr -> F::operator(void) <-> finally()
-			//if traits_hint != Enums -> F::operator(enum_value) <-> catch(...)
-			//if traits_hint == Enums[traits_hint] -> F::operator(value.get<Enums>) <-> catch(Enums)
-			if(traits_hint == nullptr)
+			//if id == nullptr -> F::operator(void) <-> finally()
+			//if id != Enums -> F::operator(enum_value) <-> catch(...)
+			//if id == Enums[id] -> F::operator(value.get<Enums>) <-> catch(Enums)
+			if(id == nullptr)
 			{
 				if constexpr(std::invocable<F>)
 					std::forward<F>(f)();
@@ -172,6 +165,6 @@ namespace hrs
 		}
 	private:
 		error_enum_value value;
-		traits_hint_type traits_hint;
+		const std::type_info *id;
 	};
 };

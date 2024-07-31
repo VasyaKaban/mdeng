@@ -2,172 +2,96 @@
 
 #include "MemoryType.h"
 #include "MemoryPool.h"
+#include "AllocatorLoader.h"
+#include "../Vulkan/InitResult.h"
 
 namespace FireLand
 {
-	struct BoundedBuffer : public hrs::non_copyable
+	class BoundedBuffer;
+	class BoundedImage;
+	class BoundedBlock;
+
+	class InstanceLoader;
+
+	struct MultipleAllocateDesiredOptions
 	{
-		BlockBindPool block_bind_pool;
-		std::vector<MemoryType>::iterator memory_type;
-		vk::Buffer buffer;
-
-		BoundedBuffer(const BlockBindPool &_block_bind_pool = {},
-					  std::vector<MemoryType>::iterator _memory_type = {},
-					  vk::Buffer _buffer = {}) noexcept
-			: block_bind_pool(_block_bind_pool),
-			  memory_type(_memory_type),
-			  buffer(_buffer) {}
-
-		BoundedBuffer(BoundedBuffer &&buf) noexcept
-			: block_bind_pool(buf.block_bind_pool),
-			  memory_type(buf.memory_type),
-			  buffer(std::exchange(buf.buffer, VK_NULL_HANDLE)) {}
-
-		BoundedBuffer & operator=(BoundedBuffer &&buf) noexcept
-		{
-			block_bind_pool = buf.block_bind_pool;
-			memory_type = buf.memory_type;
-			buffer = std::exchange(buf.buffer, VK_NULL_HANDLE);
-
-			return *this;
-		}
-
-		bool IsCreated() const noexcept
-		{
-			return buffer;
-		}
-
-		std::byte * GetBufferMapPtr() noexcept
-		{
-			return block_bind_pool.pool->GetMemory().GetMapPtr() + block_bind_pool.block.offset;
-		}
-
-		const std::byte * GetBufferMapPtr() const noexcept
-		{
-			return block_bind_pool.pool->GetMemory().GetMapPtr() + block_bind_pool.block.offset;
-		}
-	};
-
-	struct BoundedImage : public hrs::non_copyable
-	{
-		BlockBindPool block_bind_pool;
-		std::vector<MemoryType>::iterator memory_type;
-		ResourceType res_type;
-		vk::Image image;
-
-		BoundedImage(const BlockBindPool &_block_bind_pool = {},
-					 std::vector<MemoryType>::iterator _memory_type = {},
-					 ResourceType _res_type = {},
-					 vk::Image _image = {}) noexcept
-			: block_bind_pool(_block_bind_pool),
-			  memory_type(_memory_type),
-			  res_type(_res_type),
-			  image(_image) {}
-
-		BoundedImage(BoundedImage &&img) noexcept
-			: block_bind_pool(img.block_bind_pool),
-			  memory_type(img.memory_type),
-			  res_type(img.res_type),
-			  image(std::exchange(img.image, VK_NULL_HANDLE)) {}
-
-		BoundedImage & operator=(BoundedImage &&img) noexcept
-		{
-			block_bind_pool = img.block_bind_pool;
-			memory_type = img.memory_type;
-			res_type = img.res_type;
-			image = std::exchange(img.image, VK_NULL_HANDLE);
-
-			return *this;
-		}
-
-		bool IsCreated() const noexcept
-		{
-			return image;
-		}
-
-		std::byte * GetImageMapPtr() noexcept
-		{
-			return block_bind_pool.pool->GetMemory().GetMapPtr() + block_bind_pool.block.offset;
-		}
-
-		const std::byte * GetImageMapPtr() const noexcept
-		{
-			return block_bind_pool.pool->GetMemory().GetMapPtr() + block_bind_pool.block.offset;
-		}
-	};
-
-	enum class MemoryTypeSatisfyOp
-	{
-		Any,
-		Only
-	};
-
-	enum class AllocatorResult
-	{
-		Success,
-		NoSatisfiedMemoryTypes
+		VkMemoryPropertyFlags memory_property;
+		MemoryTypeSatisfyOp op;
+		hrs::flags<AllocationFlags> flags;
 	};
 
 	class Allocator : public hrs::non_copyable
 	{
+	private:
+		Allocator(VkDevice _device,
+				  AllocatorLoader &&al,
+				  VkDeviceSize _buffer_image_granularity,
+				  std::vector<MemoryType> &&_memory_types,
+				  std::function<NewPoolSizeCalculator> &&_pool_size_calc,
+				  const VkAllocationCallbacks *_allocation_callbacks) noexcept;
 	public:
-		Allocator(vk::Device _device, vk::PhysicalDevice ph_device);
+		Allocator() noexcept;
 		~Allocator();
 		Allocator(Allocator &&allocator) noexcept;
 		Allocator & operator=(Allocator &&allocator) noexcept;
 
+		static hrs::expected<Allocator, InitResult>
+		Create(VkDevice _device,
+			   VkPhysicalDevice physical_device,
+			   PFN_vkGetDeviceProcAddr device_vkGetDeviceProcAddr,
+			   const InstanceLoader &il,
+			   std::function<NewPoolSizeCalculator> &&_pool_size_calc,
+			   const VkAllocationCallbacks *_allocation_callbacks);
+
 		void Destroy() noexcept;
 
-		hrs::expected<BoundedBuffer, hrs::error>
-		Create(const vk::BufferCreateInfo &info,
-			   MemoryTypeSatisfyOp op,
-			   vk::MemoryPropertyFlags desired_props,
-			   vk::DeviceSize alignment = 1,
-			   hrs::flags<AllocationFlags> flags = {},
-			   const std::function<NewPoolSizeCalculator> &calc = MemoryType::DefaultNewPoolSizeCalculator);
+		VkDevice GetDevice() const noexcept;
+		const AllocatorLoader & GetAllocatorLoader() const noexcept;
+		const std::vector<MemoryType> & GetMemoryTypes() const noexcept;
+		const std::function<NewPoolSizeCalculator> & GetPoolSizeCalculatorFunction() const noexcept;
+		void SetPoolSizeCalculatorFunction(std::function<NewPoolSizeCalculator> &&_pool_new_calc);
+		VkDeviceSize GetBufferImageGranularity() const noexcept;
+		bool IsGranularityFree() const noexcept;
 
-		hrs::expected<BoundedImage, hrs::error>
-		Create(const vk::ImageCreateInfo &info,
-			   MemoryTypeSatisfyOp op,
-			   vk::MemoryPropertyFlags desired_props,
-			   vk::DeviceSize alignment = 1,
-			   hrs::flags<AllocationFlags> flags = {},
-			   const std::function<NewPoolSizeCalculator> &calc = MemoryType::DefaultNewPoolSizeCalculator);
+		bool IsCreated() const noexcept;
 
-		void Release(const BoundedBuffer &bounded_buffer, MemoryPoolOnEmptyPolicy policy);
-		void Release(const BoundedImage &bounded_image, MemoryPoolOnEmptyPolicy policy);
+		hrs::expected<std::pair<BoundedBlock, std::size_t>, hrs::error>
+		Allocate(const VkMemoryRequirements &req,
+				 ResourceType res_type,
+				 std::span<const MultipleAllocateDesiredOptions> desired,
+				 const std::function<NewPoolSizeCalculator> &calc = nullptr);
+
+		void Free(const BoundedBlock &bb,
+				  MemoryPoolOnEmptyPolicy policy,
+				  ResourceType res_type);
+
+		hrs::expected<std::pair<BoundedBuffer, std::size_t>, hrs::error>
+		Allocate(const VkBufferCreateInfo &info,
+				 std::span<const MultipleAllocateDesiredOptions> desired,
+				 const std::function<NewPoolSizeCalculator> &calc = nullptr);
+
+		void Free(const BoundedBuffer &bounded_buffer,
+				  MemoryPoolOnEmptyPolicy policy);
+
+		hrs::expected<std::pair<BoundedImage, std::size_t>, hrs::error>
+		Allocate(const VkImageCreateInfo &info,
+				 std::span<const MultipleAllocateDesiredOptions> desired,
+				 const std::function<NewPoolSizeCalculator> &calc = nullptr);
+
+		void Free(const BoundedImage &bounded_image,
+				  MemoryPoolOnEmptyPolicy policy);
 
 	private:
 		bool is_memory_type_satisfy(const MemoryType &mem_type,
 									MemoryTypeSatisfyOp op,
-									vk::MemoryPropertyFlags desired_props,
-									const vk::MemoryRequirements &req) const noexcept;
-
-		bool is_non_terminate_error(const hrs::error &err) const noexcept;
+									VkMemoryPropertyFlags desired_props,
+									const VkMemoryRequirements &req) const noexcept;
 	private:
-		vk::Device device;
+		VkDevice device;
+		AllocatorLoader loader;
+		VkDeviceSize buffer_image_granularity;
 		std::vector<MemoryType> memory_types;
+		std::function<NewPoolSizeCalculator> pool_size_calc;
+		const VkAllocationCallbacks *allocation_callbacks;
 	};
-};
-
-template<>
-struct hrs::enum_error_traits<FireLand::AllocatorResult>
-{
-	constexpr static void traits_hint() noexcept {};
-
-	constexpr static std::string_view get_name(FireLand::AllocatorResult value) noexcept
-	{
-		switch(value)
-		{
-			case FireLand::AllocatorResult::Success:
-				return "Success";
-				break;
-			case FireLand::AllocatorResult::NoSatisfiedMemoryTypes:
-				return "NoSatisfiedMemoryTypes";
-				break;
-			default:
-				return "";
-				break;
-		}
-	}
 };

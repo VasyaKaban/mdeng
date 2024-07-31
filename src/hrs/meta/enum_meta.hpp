@@ -27,11 +27,19 @@ namespace hrs
 		template<hrs::static_string names>
 		constexpr auto collect_enum_names() noexcept
 		{
-			constexpr auto sc = hrs::split_cursor_create<names, ",">();
-			return hrs::loop_and_yield<sc, enum_names_collector>();
+			if constexpr(names == "")
+				return std::tuple<>{};
+			else
+			{
+				constexpr auto sc = hrs::split_cursor_create<names, ",">();
+				return hrs::loop_and_yield<sc, enum_names_collector>();
+			}
 		}
 
-		template<typename E, hrs::static_string _name, hrs::static_string _names, E ..._values>
+		template<typename E,
+				  hrs::static_string _name,
+				  hrs::static_string _names,
+				  E ..._values>
 			struct enum_meta_base
 		{
 			using refl_enum = E;

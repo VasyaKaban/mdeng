@@ -51,3 +51,5 @@ HRS_REFL_ENUM_BEGIN_EXISTED(NS::NAME __VA_OPT__(,) __VA_ARGS__)
 #define HRS_REFL_ENUM_END() \
 	}; \
 };
+
+#include "enum_meta.hpp"

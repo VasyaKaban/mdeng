@@ -183,7 +183,8 @@ namespace hrs
 
 				   //o********s
 				   //     o************s
-			return (post_blk.offset >= prev_blk.offset && post_blk.offset <= (prev_blk.offset + prev_blk.size));
+			return !(prev_blk.offset + prev_blk.size <= post_blk.offset);
+			//return (post_blk.offset >= prev_blk.offset && post_blk.offset <= (prev_blk.offset + prev_blk.size));
 		}
 
 		std::optional<block<T>> acquire_from_existed(const mem_req<T> &req)
@@ -191,9 +192,6 @@ namespace hrs
 			hrs::assert_true_debug(req.is_alignment_power_of_two(), "Alignment is not power of two!");
 
 			if(blocks.empty())
-				return {};
-
-			if(req.size == 0)
 				return {};
 
 			for(auto it = blocks.begin(); it != blocks.end(); it++)
