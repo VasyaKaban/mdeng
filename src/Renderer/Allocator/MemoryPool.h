@@ -16,8 +16,6 @@ namespace FireLand
 		NonLinear
 	};
 
-	class AllocatorLoader;
-
 	enum class MemoryPoolType
 	{
 		None = 0,
@@ -48,11 +46,11 @@ namespace FireLand
 			   std::uint32_t memory_type_index,
 			   bool map_memory,
 			   VkDeviceSize _buffer_image_granularity,
-			   const AllocatorLoader &al,
+			   const DeviceLoader &dl,
 			   const VkAllocationCallbacks *alc);
 
 		bool IsCreated() const noexcept;
-		void Destroy(VkDevice device, const AllocatorLoader &al, const VkAllocationCallbacks *alc) noexcept;
+		void Destroy(VkDevice device, const DeviceLoader &dl, const VkAllocationCallbacks *alc) noexcept;
 
 		Memory & GetMemory() noexcept;
 		const Memory & GetMemory() const noexcept;
@@ -65,7 +63,7 @@ namespace FireLand
 		std::size_t GetNonLinearObjectCount() const noexcept;
 		std::size_t GetLinearObjectCount() const noexcept;
 
-		hrs::expected<std::byte *, VkResult> MapMemory(VkDevice device, const AllocatorLoader &al) noexcept;
+		hrs::expected<std::byte *, VkResult> MapMemory(VkDevice device, const DeviceLoader &dl) noexcept;
 
 		hrs::expected<hrs::block<VkDeviceSize>, AllocatorResult>
 		Acquire(ResourceType res_type, const hrs::mem_req<VkDeviceSize> &req);

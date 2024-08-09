@@ -1,32 +1,36 @@
 #include "TransferChannel.h"
-#include "../Context/Device.h"
-#include "../Allocator/AllocateFromMany.hpp"
-#include "TransferBufferOp.hpp"
+#include "../Allocator/Allocator.h"
+#include "../Context/DeviceLoader.h"
+#include "../Vulkan/codegen/loader_check_begin.h"
+#include "../Vulkan/VkResultMeta.hpp"
+#include <execution>
 
 namespace FireLand
 {
-	void TransferChannel::init(BoundedBufferSizeFillness &&buffer,
-							   vk::Fence _wait_fence,
-							   vk::Queue _transfer_queue,
-							   vk::CommandBuffer _command_buffer,
-							   const std::function<NewPoolSizeCalculator> &_calc,
-							   vk::DeviceSize _rounding_size,
-							   vk::DeviceSize _buffer_size_power,
-							   vk::DeviceSize _buffer_alignment) noexcept
+	TransferChannel::TransferChannel(VkDevice _device,
+									 const DeviceLoader *_dl,
+									 Allocator *_allocator,
+									 VkFence _wait_fence,
+									 const QueueFamilyIndex &_transfer_queue,
+									 VkDeviceSize _buffer_rounding_size,
+									 VkCommandBuffer _command_buffer,
+									 const VkAllocationCallbacks *_allocation_callbacks) noexcept
+		: device(_device),
+		  dl(_dl),
+		  allocator(_allocator),
+		  wait_fence(_wait_fence),
+		  transfer_queue(_transfer_queue),
+		  write_state(TransferChannelWriteState::Flushed),
+		  buffer_rounding_size(_buffer_rounding_size),
+		  command_buffer(_command_buffer),
+		  allocation_callbacks(_allocation_callbacks)
 	{
-		buffers.push_back(std::move(buffer));
-		wait_fence = _wait_fence;
-		transfer_queue = _transfer_queue;
-		calc = _calc;
-		rounding_size = _rounding_size;
-		buffer_size_power = _buffer_size_power;
-		buffer_alignment = _buffer_alignment;
-		is_in_write = false;
-		command_buffer = _command_buffer;
+		hrs::assert_true_debug(buffer_rounding_size != 0,
+							   "Buffer rounding size must be greater than zero!");
 	}
 
-	TransferChannel::TransferChannel(Device *_parent_device) noexcept
-		: parent_device(_parent_device) {}
+	TransferChannel::TransferChannel() noexcept
+		: device(VK_NULL_HANDLE) {}
 
 	TransferChannel::~TransferChannel()
 	{
@@ -34,83 +38,84 @@ namespace FireLand
 	}
 
 	TransferChannel::TransferChannel(TransferChannel &&tc) noexcept
-		: parent_device(tc.parent_device),
+		: device(std::exchange(tc.device, VK_NULL_HANDLE)),
+		  dl(tc.dl),
+		  allocator(tc.allocator),
 		  buffers(std::move(tc.buffers)),
 		  wait_fence(tc.wait_fence),
 		  transfer_queue(tc.transfer_queue),
-		  calc(tc.calc),
-		  rounding_size(tc.rounding_size),
-		  buffer_alignment(tc.buffer_alignment),
-		  buffer_size_power(tc.buffer_size_power),
-		  is_in_write(tc.is_in_write),
-		  command_buffer(tc.command_buffer) {}
+		  write_state(tc.write_state),
+		  buffer_rounding_size(tc.buffer_rounding_size),
+		  command_buffer(tc.command_buffer),
+		  allocation_callbacks(tc.allocation_callbacks) {}
 
 	TransferChannel & TransferChannel::operator=(TransferChannel &&tc) noexcept
 	{
 		Destroy();
 
-		parent_device = tc.parent_device;
+		device = std::exchange(tc.device, VK_NULL_HANDLE);
+		dl = tc.dl;
+		allocator = tc.allocator;
 		buffers = std::move(tc.buffers);
 		wait_fence = tc.wait_fence;
 		transfer_queue = tc.transfer_queue;
-		calc = tc.calc;
-		rounding_size = tc.rounding_size;
-		buffer_alignment = tc.buffer_alignment;
-		buffer_size_power = tc.buffer_size_power;
-		is_in_write = tc.is_in_write;
+		write_state = tc.write_state;
+		buffer_rounding_size = tc.buffer_rounding_size;
 		command_buffer = tc.command_buffer;
+		allocation_callbacks = tc.allocation_callbacks;
 
 		return *this;
 	}
 
-	hrs::error TransferChannel::Recreate(vk::Queue _transfer_queue,
-										 vk::CommandBuffer _command_buffer,
-										 vk::DeviceSize _rounding_size,
-										 std::size_t _buffer_size_power,
-										 vk::DeviceSize _buffer_alignment,
-										 const std::function<NewPoolSizeCalculator> &_calc)
+	hrs::expected<TransferChannel, InitResult>
+	TransferChannel::Create(VkDevice _device,
+							const DeviceLoader &_dl,
+							Allocator &_allocator,
+							const QueueFamilyIndex &_transfer_queue,
+							VkCommandBuffer _command_buffer,
+							VkDeviceSize _buffer_rounding_size,
+							const VkAllocationCallbacks *_allocation_callbacks)
 	{
-		hrs::assert_true_debug(_rounding_size > 0, "Rounding size must be greater than zero!");
+		hrs::assert_true_debug(_device != VK_NULL_HANDLE, "Device isn't created yet!");
+		hrs::assert_true_debug(_allocator.IsCreated(), "Allocator isn't created yet!");
+		hrs::assert_true_debug(_transfer_queue.queue != VK_NULL_HANDLE, "Queue isn't retrieved yet!");
+		hrs::assert_true_debug(_command_buffer != VK_NULL_HANDLE, "Command buffer isn't created yet!");
+		hrs::assert_true_debug(_buffer_rounding_size > 0, "Buffer rounding size must be greater than zero!");
 
-		Destroy();
+		FIRE_LAND_LOADER_CHECK_USE(_dl)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkCreateFence)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkDestroyFence)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkWaitForFences)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkGetFenceStatus)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkResetFences)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkBeginCommandBuffer)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkEndCommandBuffer)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkCmdPipelineBarrier)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkCmdCopyBuffer)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkCmdCopyBufferToImage)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkQueueSubmit)
+		FIRE_LAND_LOADER_CHECK_UNUSE()
 
-		constexpr static vk::FenceCreateInfo fence_info(vk::FenceCreateFlagBits::eSignaled);
-		auto [u_fence_res, u_fence] = parent_device->GetHandle().createFenceUnique(fence_info);
-		if(u_fence_res != vk::Result::eSuccess)
-			return u_fence_res;
-
-		if(_buffer_size_power == 0)
+		constexpr static VkFenceCreateInfo fence_info =
 		{
-			init({},
-				 u_fence.release(),
-				 _transfer_queue,
-				 _command_buffer,
-				 _calc,
-				 _rounding_size,
-				 _buffer_size_power,
-				 buffer_alignment);
-			return {};
-		}
+			.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+			.pNext = nullptr,
+			.flags = VK_FENCE_CREATE_SIGNALED_BIT
+		};
 
-		auto buffer_exp = allocate_buffer({_rounding_size * _buffer_size_power, _buffer_alignment}, _calc);
-		if(!buffer_exp)
-			return buffer_exp.error();
+		VkFence _wait_fence;
+		VkResult res = _dl.vkCreateFence(_device, &fence_info, _allocation_callbacks, &_wait_fence);
+		if(res != VK_SUCCESS)
+			return res;
 
-		init(std::move(buffer_exp.value()),
-			 u_fence.release(),
-			 _transfer_queue,
-			 _command_buffer,
-			 _calc,
-			 _rounding_size,
-			 _buffer_size_power,
-			 _buffer_alignment);
-
-		return {};
-	}
-
-	vk::CommandBuffer TransferChannel::GetCommandBuffer() const noexcept
-	{
-		return command_buffer;
+		return TransferChannel(_device,
+							   &_dl,
+							   &_allocator,
+							   _wait_fence,
+							   _transfer_queue,
+							   _buffer_rounding_size,
+							   _command_buffer,
+							   _allocation_callbacks);
 	}
 
 	void TransferChannel::Destroy() noexcept
@@ -118,433 +123,456 @@ namespace FireLand
 		if(!IsCreated())
 			return;
 
-		vk::Result res = WaitFence();
-		hrs::assert_true(res == vk::Result::eSuccess, "BAD WAIT RESULT!!!");
+		VkResult wait_res = WaitFence();
+		hrs::assert_true(wait_res == VK_SUCCESS, "Bad WaitFence result = {}!",
+						 hrs::enum_meta<VkResult>::get_name(wait_res));
 
-		vk::Device device_handle = parent_device->GetHandle();
-		wait_fence = (device_handle.destroy(wait_fence), VK_NULL_HANDLE);
-		free_buffers();
+		dl->vkDestroyFence(device, wait_fence, allocation_callbacks);
+		for(const auto &buffer : buffers)
+			allocator->Free(buffer, MemoryPoolOnEmptyPolicy::Free);
+
 		buffers.clear();
+		device = VK_NULL_HANDLE;
 	}
 
 	bool TransferChannel::IsCreated() const noexcept
 	{
-		return !buffers.empty();
+		return device != VK_NULL_HANDLE;
 	}
 
-	vk::Result TransferChannel::Flush(std::span<const vk::SubmitInfo> submits) noexcept
+	VkResult TransferChannel::Flush(std::span<const VkSubmitInfo> submits) noexcept
 	{
-		if(!is_in_write)
-			return vk::Result::eSuccess;
+		hrs::assert_true_debug(IsCreated(), "Transfer channel isn't created yet!");
+		hrs::assert_true_debug(write_state == TransferChannelWriteState::WriteEnded,
+							   "Write state must be 'Ended'!");
 
-		vk::Result res = command_buffer.end();
-		if(res != vk::Result::eSuccess)
-			return res;
+		VkResult res = dl->vkQueueSubmit(transfer_queue.queue, submits.size(), submits.data(), wait_fence);
+		if(res == VK_SUCCESS)
+			write_state = TransferChannelWriteState::Flushed;
 
-		res = parent_device->GetHandle().resetFences(wait_fence);
-		if(res != vk::Result::eSuccess)
-			return res;
-
-		res = transfer_queue.submit(submits, wait_fence);
-		if(res != vk::Result::eSuccess)
-			return res;
-
-		return vk::Result::eSuccess;
-	}
-
-	vk::Result TransferChannel::GetWaitFenceStatus() const noexcept
-	{
-		return parent_device->GetHandle().getFenceStatus(wait_fence);
-	}
-
-	vk::Result TransferChannel::PlainWaitFence(std::uint64_t timeout) const noexcept
-	{
-		return parent_device->GetHandle().waitForFences(wait_fence, VK_TRUE, timeout);
-	}
-
-	vk::Result TransferChannel::WaitFence(std::uint64_t timeout) noexcept
-	{
-		vk::Result res = PlainWaitFence(timeout);
-		for(auto &wait_func : pending_wait_functions)
-			wait_func();
-
-		pending_wait_functions.clear();
 		return res;
 	}
 
-	hrs::expected<std::size_t, hrs::error>
-	TransferChannel::CopyBuffer(vk::Buffer dst_buffer,
-								std::span<const Data> datas,
-								std::span<const TransferBufferOpRegion> regions)
+	VkResult TransferChannel::GetWaitFenceStatus() const noexcept
 	{
-		if(datas.empty() || regions.empty())
-			return 0;
-
-		vk::DeviceSize common_size = 0;
-		for(const auto &reg : regions)
-			common_size += reg.data_blk.size;
-
-		for(std::size_t i = 0; i < buffers.size(); i++)
-		{
-			auto &buffer = buffers[i];
-			if(buffer.IsEnoughSpace(common_size))
-			{
-				if(!IsWriteStarted())
-				{
-					vk::Result res = start_write();
-					if(res != vk::Result::eSuccess)
-						return res;
-				}
-
-				copy_buffer(dst_buffer, datas, regions, buffer);
-				return i;
-			}
-		}
-
-		auto unexp_res = push_new_buffer(common_size);
-		if(unexp_res)
-			return unexp_res;
-
-		copy_buffer(dst_buffer, datas, regions, buffers.back());
-		return buffers.size() - 1;
+		hrs::assert_true_debug(IsCreated(), "Transfer channel isn't created yet!");
+		return dl->vkGetFenceStatus(device, wait_fence);
 	}
 
-	hrs::expected<std::size_t, hrs::error>
-	TransferChannel::CopyImageSubresource(vk::Image dst_image,
-										  vk::ImageLayout image_layout,
-										  vk::DeviceSize block_size,
-										  std::span<const Data> datas,
-										  std::span<const TransferImageOpRegion> regions)
+	VkResult TransferChannel::WaitFence(std::uint64_t timeout) noexcept
 	{
-		if(datas.empty() || regions.empty() || block_size == 0)
-			return 0;
-
-		vk::DeviceSize common_size = 0;
-		for(const auto &reg : regions)
-			common_size += calculate_region_size(reg.image_extent, block_size);
-
-		for(std::size_t i = 0; i < buffers.size(); i++)
-		{
-			auto &buffer = buffers[i];
-			if(buffer.IsEnoughSpace(common_size))
-			{
-				if(!IsWriteStarted())
-				{
-					vk::Result res = start_write();
-					if(res != vk::Result::eSuccess)
-						return res;
-				}
-
-				copy_image(dst_image, image_layout, block_size, datas, regions, buffer);
-				return i;
-			}
-		}
-
-		auto unexp_res = push_new_buffer(common_size);
-		if(unexp_res)
-			return unexp_res;
-
-		copy_image(dst_image, image_layout, block_size, datas, regions, buffers.back());
-		return buffers.size() - 1;
+		hrs::assert_true_debug(IsCreated(), "Transfer channel isn't created yet!");
+		return dl->vkWaitForFences(device, 1, &wait_fence, VK_TRUE, timeout);
 	}
 
-	vk::Result TransferChannel::EmbedBarrier(vk::PipelineStageFlags src_stages,
-											 vk::PipelineStageFlags dst_stages,
-											 vk::DependencyFlags dependency,
-											 std::span<const vk::MemoryBarrier> memory_barriers,
-											 std::span<const vk::BufferMemoryBarrier> buffer_memory_barriers,
-											 std::span<const vk::ImageMemoryBarrier> image_memory_barriers)
+	VkDevice TransferChannel::GetDevice() const noexcept
 	{
-		if(!IsWriteStarted())
-		{
-			vk::Result res = start_write();
-			if(res != vk::Result::eSuccess)
-				return res;
-		}
-
-		command_buffer.pipelineBarrier(src_stages,
-									   dst_stages,
-									   dependency,
-									   memory_barriers,
-									   buffer_memory_barriers,
-									   image_memory_barriers);
-
-		return vk::Result::eSuccess;
+		return device;
 	}
 
-	bool TransferChannel::IsWriteStarted() const noexcept
+	const DeviceLoader * TransferChannel::GetDeviceLoader() const noexcept
 	{
-		return is_in_write;
+		return dl;
 	}
 
-	Device * TransferChannel::GetParentDevice () noexcept
+	Allocator * TransferChannel::GetAllocator() noexcept
 	{
-		return parent_device;
+		return allocator;
 	}
 
-	const Device * TransferChannel::GetParentDevice () const noexcept
+	const Allocator * TransferChannel::GetAllocator() const noexcept
 	{
-		return parent_device;
+		return allocator;
 	}
 
-	vk::Queue TransferChannel::GetTransferQueue() const noexcept
+	const QueueFamilyIndex & TransferChannel::GetTransferQueue() const noexcept
 	{
 		return transfer_queue;
 	}
 
-	const std::function<NewPoolSizeCalculator> & TransferChannel::GetNewPoolSizeCalculator() const noexcept
+	VkDeviceSize TransferChannel::GetBufferRoundingSize() const noexcept
 	{
-		return calc;
+		return buffer_rounding_size;
 	}
 
-	vk::DeviceSize TransferChannel::GetRoundingSize() const noexcept
+	VkCommandBuffer TransferChannel::GetCommandBuffer() const noexcept
 	{
-		return rounding_size;
+		return command_buffer;
 	}
 
-	vk::DeviceSize TransferChannel::GetBufferAlignment() const noexcept
+	const std::vector<BoundedBufferSizeFillness> & TransferChannel::GetBuffers() const noexcept
 	{
-		return buffer_alignment;
+		return buffers;
 	}
 
-	vk::Fence TransferChannel::GetFence() const noexcept
+	VkFence TransferChannel::GetWaitFence() const noexcept
 	{
 		return wait_fence;
 	}
 
-	const BoundedBufferSize & TransferChannel::GetBuffer(std::size_t index) const noexcept
+	VkResult TransferChannel::Begin(const VkCommandBufferBeginInfo &info) noexcept
 	{
-		return buffers[index].bounded_buffer_size;
-	}
+		hrs::assert_true_debug(IsCreated(), "Transfer channel isn't created yet!");
+		hrs::assert_true_debug(write_state != TransferChannelWriteState::WriteEnded,
+							   "Write state cannot be 'WriteEnded'!");
+		if(write_state == TransferChannelWriteState::WriteStarted)
+			return VK_SUCCESS;
 
-	hrs::error TransferChannel::FlattenBuffers(std::size_t lower_buffer_size_power,
-											   std::size_t higher_buffer_size_power)
-	{
-		if(lower_buffer_size_power > higher_buffer_size_power)
-			return {};
-
-		vk::Result res = WaitFence();
-		if(res != vk::Result::eSuccess)
+		//wait fence
+		//clear buffers
+		VkResult res = WaitFence();
+		if(res != VK_SUCCESS)
 			return res;
 
+		for(auto &buffer : buffers)
+			buffer.fillness = 0;
 
-		if(higher_buffer_size_power == 0)
+		res = dl->vkBeginCommandBuffer(command_buffer, &info);
+		if(res == VK_SUCCESS)
+			write_state = TransferChannelWriteState::WriteStarted;
+
+		return res;
+	}
+
+	VkResult TransferChannel::End() noexcept
+	{
+		hrs::assert_true_debug(IsCreated(), "Transfer channel isn't created yet!");
+		hrs::assert_true_debug(write_state != TransferChannelWriteState::Flushed,
+							   "Write state cannot be 'Flushed'!");
+		if(write_state == TransferChannelWriteState::WriteEnded)
+			return VK_SUCCESS;
+
+		VkResult res = dl->vkEndCommandBuffer(command_buffer);
+		if(res != VK_SUCCESS)
+			return res;
+
+		res = dl->vkResetFences(device, 1, &wait_fence);
+		if(res != VK_SUCCESS)
+			return res;
+
+		write_state = TransferChannelWriteState::WriteEnded;
+
+		return res;
+	}
+
+	TransferChannelWriteState TransferChannel::GetWriteState() const noexcept
+	{
+		return write_state;
+	}
+
+	hrs::error
+	TransferChannel::CopyBuffer(VkBuffer dst_buffer,
+								std::span<const std::byte *> datas,
+								std::span<const TransferBufferOpRegion> regions)
+	{
+		hrs::assert_true_debug(IsCreated(), "Transfer channel isn't created yet!");
+		hrs::assert_true_debug(dst_buffer != VK_NULL_HANDLE, "Destination buffer isn't created yet!");
+		hrs::assert_true(write_state == TransferChannelWriteState::WriteStarted,
+						 "Writing has not been started yet!");
+
+		VkDeviceSize common_size = 0;
+		for(const auto &region : regions)
 		{
-			free_buffers();
-			buffers.clear();
+			//just use 4-byte alignment
+			common_size += hrs::round_up_size_to_alignment(region.data_blk.size, 4);
 		}
-		else
+
+		for(auto &buffer : buffers)
 		{
-			std::size_t target_power = std::numeric_limits<std::size_t>::max();
-			std::optional<std::size_t> found_i = {};
-			for(std::size_t i = 0; i < buffers.size(); i++)
+			if(auto opt = buffer.Append({common_size, 4}); opt)
 			{
-				std::size_t buffer_power = buffers[i].bounded_buffer_size.size / rounding_size;
-				if(buffer_power >= lower_buffer_size_power &&
-					buffer_power <= higher_buffer_size_power &&
-					buffer_power < target_power)
-				{
-					found_i = i;
-				}
-			}
-
-			if(found_i)
-			{
-				auto buffer = std::move(buffers[*found_i]);
-				free_buffers();
-				buffers.resize(1);
-				buffers[0] = std::move(buffer);
-			}
-			else
-			{
-				free_buffers();
-				auto buffer_exp = allocate_buffer({lower_buffer_size_power, buffer_alignment}, calc);
-				if(!buffer_exp)
-					return buffer_exp.error();
-
-				buffers.resize(1);
-				buffers[0] = std::move(buffer_exp.value());
+				copy_buffer(dst_buffer, buffer, datas, regions, *opt);
+				return {};
 			}
 		}
 
+		//allocate
+		auto err = InsertBuffer(common_size);
+		if(err)
+			return err;
+
+
+		auto opt = buffers.back().Append({common_size, 4});
+		hrs::assert_true_debug(opt.has_value(), "Contract violation! Append must return valid offset!");
+
+		copy_buffer(dst_buffer, buffers.back(), datas, regions, *opt);
+		return {};
+
+	}
+
+	hrs::error
+	TransferChannel::CopyImageSubresource(VkImage dst_image,
+										  VkImageLayout image_layout,
+										  VkDeviceSize block_size,
+										  std::span<const std::byte *> datas,
+										  std::span<const TransferImageOpRegion> regions)
+	{
+		//DO NOT FORGET ABOUT 4-bytes alignment!!!
+		hrs::assert_true_debug(IsCreated(), "Transfer channel isn't created yet!");
+		hrs::assert_true_debug(dst_image != VK_NULL_HANDLE, "Destination image isn't created yet!");
+		hrs::assert_true(block_size != 0, "The block size must be greater than zero!");
+		hrs::assert_true(write_state == TransferChannelWriteState::WriteStarted,
+						 "Writing has not been started yet!");
+
+		VkDeviceSize common_alignment = block_size * 4;//multiple of 4 and block_size
+		VkDeviceSize common_size = 0;
+		for(const auto &region : regions)
+			common_size += hrs::round_up_size_to_alignment(image_data_size(region.image_extent, block_size),
+														   common_alignment);
+
+		for(auto &buffer : buffers)
+		{
+			if(auto opt = buffer.Append({common_size, 4}); opt)
+			{
+				copy_image(dst_image, image_layout, block_size, buffer, datas, regions, *opt);
+				return {};
+			}
+		}
+
+		//allocate
+		auto err = InsertBuffer(common_size);
+		if(err)
+			return err;
+
+
+		auto opt = buffers.back().Append({common_size, common_alignment});
+		hrs::assert_true_debug(opt.has_value(), "Contract violation! Append must return valid offset!");
+
+		copy_image(dst_image, image_layout, block_size, buffers.back(), datas, regions, *opt);
 		return {};
 	}
 
-	hrs::expected<BoundedBufferSize, hrs::error>
-	TransferChannel::allocate_buffer(const hrs::mem_req<vk::DeviceSize> &req,
-									 const std::function<NewPoolSizeCalculator> &_calc)
+	hrs::expected<EmbedResult, hrs::error> TransferChannel::Embed(const hrs::mem_req<VkDeviceSize> &req)
 	{
-		constexpr static std::array variants =
+		hrs::assert_true_debug(IsCreated(), "Transfer channel isn't created yet!");
+		hrs::assert_true(write_state == TransferChannelWriteState::WriteStarted,
+						 "Writing has not been started yet!");
+
+		for(auto &buffer : buffers)
 		{
-			MemoryPropertyOpFlags(vk::MemoryPropertyFlagBits::eHostVisible,
-								  MemoryTypeSatisfyOp::Any,
-								  AllocationFlags::MapMemory),
-			MemoryPropertyOpFlags(vk::MemoryPropertyFlagBits::eHostVisible,
-								  MemoryTypeSatisfyOp::Any,
-								  hrs::flags(AllocationFlags::MapMemory) |
-									  AllocationFlags::AllowPlaceWithMixedResources)
+			auto append_opt = buffer.Append(req);
+			if(append_opt)
+				return
+					EmbedResult
+					{
+						.command_buffer = command_buffer,
+						.buffer = buffer.buffer,
+						.offset = *append_opt
+					};
+		}
+
+		hrs::error err = InsertBuffer(req.size);
+		if(err)
+			return err;
+
+		auto opt = buffers.back().Append(req);
+		hrs::assert_true_debug(opt.has_value(), "Contract violation! Append must return valid offset!");
+
+		return
+			EmbedResult
+			{
+				.command_buffer = command_buffer,
+				.buffer = buffers.back().buffer,
+				.offset = *opt
+			};
+	}
+
+	void TransferChannel::EmbedBarrier(VkPipelineStageFlags src_stages,
+									   VkPipelineStageFlags dst_stages,
+									   VkDependencyFlags dependency,
+									   std::span<const VkMemoryBarrier> memory_barriers,
+									   std::span<const VkBufferMemoryBarrier> buffer_memory_barriers,
+									   std::span<const VkImageMemoryBarrier> image_memory_barriers) noexcept
+	{
+		hrs::assert_true_debug(IsCreated(), "Transfer channel isn't created yet!");
+		hrs::assert_true(write_state == TransferChannelWriteState::WriteStarted,
+						 "Writing has not been started yet!");
+		dl->vkCmdPipelineBarrier(command_buffer,
+								 src_stages,
+								 dst_stages,
+								 dependency,
+								 memory_barriers.size(),
+								 memory_barriers.data(),
+								 buffer_memory_barriers.size(),
+								 buffer_memory_barriers.data(),
+								 image_memory_barriers.size(),
+								 image_memory_barriers.data());
+	}
+
+	hrs::error TransferChannel::FlattenBuffers()
+	{
+		hrs::assert_true_debug(IsCreated(), "Transfer channel isn't created yet!");
+		hrs::assert_true(write_state == TransferChannelWriteState::Flushed,
+						 "Write state must be 'Flushed'!");
+
+		VkResult res = WaitFence();
+		if(res != VK_SUCCESS)
+			return res;
+
+		VkDeviceSize common_size = 0;
+		for(auto &buffer : buffers)
+		{
+			common_size += buffer.size;
+			allocator->Free(buffer, MemoryPoolOnEmptyPolicy::Free);
+		}
+
+		buffers.clear();
+		if(common_size == 0)
+			return {};
+
+		return InsertBuffer(common_size);
+	}
+
+	hrs::error TransferChannel::InsertBuffer(VkDeviceSize size)
+	{
+		hrs::assert_true_debug(IsCreated(), "Transfer channel isn't created yet!");
+		if(!hrs::is_multiple_of(size, buffer_rounding_size))
+			size = hrs::round_up_size_to_alignment(size, buffer_rounding_size);
+
+		return allocate_insert_buffer(size);
+	}
+
+	hrs::error TransferChannel::allocate_insert_buffer(VkDeviceSize size)
+	{
+		const VkBufferCreateInfo buffer_info =
+		{
+			.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+			.pNext = nullptr,
+			.flags = {},
+			.size = size,
+			.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+			.queueFamilyIndexCount = 0,
+			.pQueueFamilyIndices = &transfer_queue.family_index
 		};
 
-		const vk::BufferCreateInfo info({},
-										req.size,
-										vk::BufferUsageFlagBits::eTransferSrc,
-										vk::SharingMode::eExclusive);
+		VkMemoryPropertyFlags memory_property;
+		MemoryTypeSatisfyOp op;
+		hrs::flags<AllocationFlags> flags;
 
-		auto buffer_exp = AllocateFromMany(*parent_device->GetAllocator(),
-										   variants,
-										   info,
-										   req.alignment,
-										   calc);
+		constexpr static std::array desired =
+		{
+			//only host visible(without coherent)
+			MultipleAllocateDesiredOptions
+			{
+				.memory_property = VkMemoryPropertyFlagBits::VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+				.op = MemoryTypeSatisfyOp::Only,
+				.flags = AllocationFlags::MapMemory
+			},
+			//host visible with any other properties
+			MultipleAllocateDesiredOptions
+			{
+				.memory_property = VkMemoryPropertyFlagBits::VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+				.op = MemoryTypeSatisfyOp::Any,
+				.flags = AllocationFlags::MapMemory
+			},
+			//allow place with mixed
+			MultipleAllocateDesiredOptions
+			{
+				.memory_property = VkMemoryPropertyFlagBits::VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+				.op = MemoryTypeSatisfyOp::Any,
+				.flags = hrs::flags(AllocationFlags::MapMemory) |
+						 AllocationFlags::AllowPlaceWithMixedResources
+			},
+		};
 
+		auto buffer_exp = allocator->Allocate(buffer_info, desired);
 		if(!buffer_exp)
 			return buffer_exp.error();
 
-		return BoundedBufferSize{std::move(buffer_exp.value()), req.size};
+		buffers.push_back(BoundedBufferSizeFillness({std::move(buffer_exp->first), size}, 0));
+		return {};
 	}
 
-	vk::Result TransferChannel::start_write() noexcept
-	{
-		vk::Result res = WaitFence();
-		if(res != vk::Result::eSuccess)
-			return res;
-
-		constexpr static vk::CommandBufferBeginInfo info(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-		res = command_buffer.begin(info);
-		if(res != vk::Result::eSuccess)
-			return res;
-
-		is_in_write = true;
-		return vk::Result::eSuccess;
-	}
-
-	void TransferChannel::copy_buffer(vk::Buffer dst_buffer,
-									  std::span<const Data> datas,
+	void TransferChannel::copy_buffer(VkBuffer dst_buffer,
+									  BoundedBufferSizeFillness &src_buffer,
+									  std::span<const std::byte *> datas,
 									  std::span<const TransferBufferOpRegion> regions,
-									  BoundedBufferSizeFillness &buffer)
+									  VkDeviceSize offset) noexcept
 	{
-		if(regions.size() == 1)
+		std::vector<VkBufferCopy> copies;
+		copies.reserve(regions.size());
+		for(const auto &region : regions)
 		{
-			const auto &region = regions[0];
-			const vk::BufferCopy copy(buffer.fillness,
-									  region.dst_buffer_offset,
-									  region.data_blk.size);
+			hrs::assert_true_debug(datas.size() > region.data_index,
+								   "Region data index = {} is out of bound = {}!",
+								   region.data_index,
+								   datas.size());
 
-			std::memcpy(buffer.bounded_buffer_size.bounded_buffer.GetBufferMapPtr() + buffer.fillness,
-						datas[region.data_index].GetData() + region.data_blk.offset,
-						region.data_blk.size);
-
-			buffer.fillness += region.data_blk.size;
-			command_buffer.copyBuffer(buffer.bounded_buffer_size.bounded_buffer.buffer,
-									  dst_buffer,
-									  copy);
-		}
-		else
-		{
-			std::vector<vk::BufferCopy> copy_regions;
-			copy_regions.reserve(regions.size());
-			for(const auto &region : regions)
+			const VkBufferCopy copy =
 			{
-				const Data &data = datas[region.data_index];
-				std::memcpy(buffer.bounded_buffer_size.bounded_buffer.GetBufferMapPtr() + buffer.fillness,
-							data.GetData() + region.data_blk.offset,
-							region.data_blk.size);
+				.srcOffset = offset,
+				.dstOffset = region.dst_buffer_offset,
+				.size = region.data_blk.size
+			};
 
-				copy_regions.push_back(vk::BufferCopy{buffer.fillness,
-													  region.dst_buffer_offset,
-													  region.data_blk.size});
+			copies.push_back(copy);
 
-				buffer.fillness += region.data_blk.size;
-			}
+			std::copy_n(std::execution::unseq,
+						datas[region.data_index] + region.data_blk.offset,
+						region.data_blk.size,
+						src_buffer.GetBufferMapPtr());
 
-			command_buffer.copyBuffer(buffer.bounded_buffer_size.bounded_buffer.buffer,
-									  dst_buffer,
-									  copy_regions);
+			offset += hrs::round_up_size_to_alignment(region.data_blk.size, 4);
 		}
+
+		dl->vkCmdCopyBuffer(command_buffer,
+							src_buffer.buffer,
+							dst_buffer,
+							copies.size(),
+							copies.data());
 	}
 
-	void TransferChannel::copy_image(vk::Image dst_image,
-									 vk::ImageLayout image_layout,
-									 vk::DeviceSize block_size,
-									 std::span<const Data> datas,
+	void TransferChannel::copy_image(VkImage dst_image,
+									 VkImageLayout image_layout,
+									 VkDeviceSize block_size,
+									 BoundedBufferSizeFillness &src_buffer,
+									 std::span<const std::byte *> datas,
 									 std::span<const TransferImageOpRegion> regions,
-									 BoundedBufferSizeFillness &buffer)
+									 VkDeviceSize offset) noexcept
 	{
-		if(regions.size() == 1)
+		std::vector<VkBufferImageCopy> copies;
+		copies.reserve(regions.size());
+		for(const auto &region : regions)
 		{
-			const auto &region = regions[0];
-			vk::DeviceSize size = calculate_region_size(region.image_extent, block_size);
-			const vk::BufferImageCopy copy(buffer.fillness,
-										   0,
-										   0,
-										   region.subresource_layers,
-										   {0, 0, 0},
-										   region.image_extent);
+			hrs::assert_true_debug(datas.size() > region.data_index,
+								   "Region data index = {} is out of bound = {}!",
+								   region.data_index,
+								   datas.size());
 
-			std::memcpy(buffer.bounded_buffer_size.bounded_buffer.GetBufferMapPtr() + buffer.fillness,
-						datas[region.data_index].GetData() + region.data_offset,
-						size);
-
-			buffer.fillness += size;
-			command_buffer.copyBufferToImage(buffer.bounded_buffer_size.bounded_buffer.buffer,
-											 dst_image,
-											 image_layout,
-											 copy);
-		}
-		else
-		{
-			std::vector<vk::BufferImageCopy> copy_regions;
-			copy_regions.reserve(regions.size());
-			for(const auto &region : regions)
+			const VkBufferImageCopy copy =
 			{
-				const Data &data = datas[region.data_index];
-				vk::DeviceSize size = calculate_region_size(region.image_extent, block_size);
+				.bufferOffset = offset,
+				.bufferRowLength = 0,
+				.bufferImageHeight = 0,
+				.imageSubresource = region.subresource_layers,
+				.imageOffset = {0, 0, 0},
+				.imageExtent = region.image_extent
+			};
 
-				std::memcpy(buffer.bounded_buffer_size.bounded_buffer.GetBufferMapPtr() + buffer.fillness,
-							datas[region.data_index].GetData() + region.data_offset,
-							size);
+			copies.push_back(copy);
 
-				copy_regions.push_back(vk::BufferImageCopy(buffer.fillness,
-														   0,
-														   0,
-														   region.subresource_layers,
-														   {0, 0, 0},
-														   region.image_extent));
-				buffer.fillness += size;
-			}
+			VkDeviceSize region_size = image_data_size(region.image_extent, block_size);
 
-			command_buffer.copyBufferToImage(buffer.bounded_buffer_size.bounded_buffer.buffer,
-											 dst_image,
-											 image_layout,
-											 copy_regions);
+			std::copy_n(std::execution::unseq,
+						datas[region.data_index] + region.data_offset,
+						region_size,
+						src_buffer.GetBufferMapPtr());
+
+			offset += hrs::round_up_size_to_alignment(region_size, block_size * 4);
 		}
+
+		dl->vkCmdCopyBufferToImage(command_buffer,
+								   src_buffer.buffer,
+								   dst_image,
+								   image_layout,
+								   copies.size(),
+								   copies.data());
 	}
 
-	vk::DeviceSize TransferChannel::calculate_region_size(const vk::Extent3D &extent,
-														  vk::DeviceSize block_size) const noexcept
+	VkDeviceSize TransferChannel::image_data_size(const VkExtent3D &extent,
+												  VkDeviceSize block_size) const noexcept
 	{
 		return extent.width * extent.height * extent.depth * block_size;
-	}
-
-	void TransferChannel::free_buffers() noexcept
-	{
-		for(auto &buffer : buffers)
-			parent_device->GetAllocator()->Release(buffer.bounded_buffer_size.bounded_buffer,
-												   MemoryPoolOnEmptyPolicy::Free);
-	}
-
-	hrs::error TransferChannel::push_new_buffer(vk::DeviceSize common_size)
-	{
-		hrs::assert_true_debug(buffer_size_power != 0,
-							   "New buffer size power must be greater than zero!");
-
-		vk::DeviceSize rounded_common_size = hrs::round_up_size_to_alignment(common_size, rounding_size);
-		vk::DeviceSize new_buffer_size = buffer_size_power * rounding_size;
-		new_buffer_size = (new_buffer_size > rounded_common_size ? new_buffer_size : rounded_common_size);
-		auto buffer_exp = allocate_buffer({new_buffer_size, buffer_alignment}, calc);
-		if(!buffer_exp)
-			return {buffer_exp.error()};
-
-		buffers.push_back({std::move(buffer_exp.value()), new_buffer_size});
-		return {};
 	}
 };

@@ -19,6 +19,7 @@
 		FIRE_LAND_LOADER_REQUIRED_FUNCTION(vkGetPhysicalDeviceImageFormatProperties) \
 		FIRE_LAND_LOADER_REQUIRED_FUNCTION(vkGetPhysicalDeviceQueueFamilyProperties) \
 		/*logical device*/ \
+		FIRE_LAND_LOADER_REQUIRED_FUNCTION(vkGetDeviceProcAddr) \
 		FIRE_LAND_LOADER_REQUIRED_FUNCTION(vkCreateDevice) \
 		FIRE_LAND_LOADER_REQUIRED_FUNCTION(vkDestroyDevice) \
 		/*surface*/ \

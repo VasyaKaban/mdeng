@@ -2,7 +2,6 @@
 
 #include "MemoryType.h"
 #include "MemoryPool.h"
-#include "AllocatorLoader.h"
 #include "../Vulkan/InitResult.h"
 
 namespace FireLand
@@ -10,7 +9,7 @@ namespace FireLand
 	class BoundedBuffer;
 	class BoundedImage;
 	class BoundedBlock;
-
+	class DeviceLoader;
 	class InstanceLoader;
 
 	struct MultipleAllocateDesiredOptions
@@ -24,7 +23,7 @@ namespace FireLand
 	{
 	private:
 		Allocator(VkDevice _device,
-				  AllocatorLoader &&al,
+				  const DeviceLoader *_dl,
 				  VkDeviceSize _buffer_image_granularity,
 				  std::vector<MemoryType> &&_memory_types,
 				  std::function<NewPoolSizeCalculator> &&_pool_size_calc,
@@ -38,7 +37,7 @@ namespace FireLand
 		static hrs::expected<Allocator, InitResult>
 		Create(VkDevice _device,
 			   VkPhysicalDevice physical_device,
-			   PFN_vkGetDeviceProcAddr device_vkGetDeviceProcAddr,
+			   const DeviceLoader &_dl,
 			   const InstanceLoader &il,
 			   std::function<NewPoolSizeCalculator> &&_pool_size_calc,
 			   const VkAllocationCallbacks *_allocation_callbacks);
@@ -46,7 +45,7 @@ namespace FireLand
 		void Destroy() noexcept;
 
 		VkDevice GetDevice() const noexcept;
-		const AllocatorLoader & GetAllocatorLoader() const noexcept;
+		const DeviceLoader * GetDeviceLoader() const noexcept;
 		const std::vector<MemoryType> & GetMemoryTypes() const noexcept;
 		const std::function<NewPoolSizeCalculator> & GetPoolSizeCalculatorFunction() const noexcept;
 		void SetPoolSizeCalculatorFunction(std::function<NewPoolSizeCalculator> &&_pool_new_calc);
@@ -88,7 +87,7 @@ namespace FireLand
 									const VkMemoryRequirements &req) const noexcept;
 	private:
 		VkDevice device;
-		AllocatorLoader loader;
+		const DeviceLoader *dl;
 		VkDeviceSize buffer_image_granularity;
 		std::vector<MemoryType> memory_types;
 		std::function<NewPoolSizeCalculator> pool_size_calc;

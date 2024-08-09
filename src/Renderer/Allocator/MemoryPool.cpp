@@ -1,5 +1,5 @@
 #include "MemoryPool.h"
-#include "AllocatorLoader.h"
+#include "../Context/DeviceLoader.h"
 #include "AllocatorResult.h"
 
 namespace FireLand
@@ -36,7 +36,7 @@ namespace FireLand
 					   std::uint32_t memory_type_index,
 					   bool map_memory,
 					   VkDeviceSize _buffer_image_granularity,
-					   const AllocatorLoader &al,
+					   const DeviceLoader &dl,
 					   const VkAllocationCallbacks *alc)
 	{
 		hrs::assert_true_debug(device != VK_NULL_HANDLE, "Device isn't created yet!");
@@ -60,17 +60,17 @@ namespace FireLand
 		};
 
 		VkDeviceMemory _memory;
-		VkResult res = al.vkAllocateMemory(device, &info, alc, &_memory);
+		VkResult res = dl.vkAllocateMemory(device, &info, alc, &_memory);
 		if(res != VK_SUCCESS)
 			return res;
 
 		Memory memory_obj(_memory, size, nullptr);
 		if(map_memory)
 		{
-			res = memory_obj.MapMemory(device, al);
+			res = memory_obj.MapMemory(device, dl);
 			if(res != VK_SUCCESS)
 			{
-				memory_obj.Free(device, al, alc);
+				memory_obj.Free(device, dl, alc);
 				return res;
 			}
 		}
@@ -86,7 +86,7 @@ namespace FireLand
 	}
 
 	void MemoryPool::Destroy(VkDevice device,
-							 const AllocatorLoader &al,
+							 const DeviceLoader &dl,
 							 const VkAllocationCallbacks *alc) noexcept
 	{
 		hrs::assert_true_debug(device != VK_NULL_HANDLE, "Device isn't created yet!");
@@ -94,7 +94,7 @@ namespace FireLand
 		if(!IsCreated())
 			return;
 
-		memory.Free(device, al, alc);
+		memory.Free(device, dl, alc);
 		free_blocks.clear();
 		linear_object_count = 0;
 		non_linear_object_count = 0;
@@ -151,12 +151,12 @@ namespace FireLand
 	}
 
 	hrs::expected<std::byte *, VkResult> MemoryPool::MapMemory(VkDevice device,
-															   const AllocatorLoader &al) noexcept
+															   const DeviceLoader &dl) noexcept
 	{
 		hrs::assert_true_debug(IsCreated(), "Memory pool isn't created yet!");
 		hrs::assert_true_debug(device != VK_NULL_HANDLE, "Device isn't created yet!");
 
-		VkResult res = memory.MapMemory(device, al);
+		VkResult res = memory.MapMemory(device, dl);
 		if(res != VK_SUCCESS)
 			return res;
 

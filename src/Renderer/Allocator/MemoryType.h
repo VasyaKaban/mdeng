@@ -79,7 +79,7 @@ namespace FireLand
 		~MemoryType() = default;
 		MemoryType(MemoryType &&mem_type) noexcept;
 
-		void Destroy(VkDevice device, const AllocatorLoader &al, const VkAllocationCallbacks *alc) noexcept;
+		void Destroy(VkDevice device, const DeviceLoader &dl, const VkAllocationCallbacks *alc) noexcept;
 
 		bool IsSatisfy(MemoryTypeSatisfyOp satisfy, VkMemoryPropertyFlags props) const noexcept;
 		bool IsSatisfyIndex(std::uint32_t memory_type_bits) const noexcept;
@@ -94,7 +94,7 @@ namespace FireLand
 				 const VkMemoryRequirements &req,
 				 hrs::flags<AllocationFlags> flags,
 				 VkDevice device,
-				 const AllocatorLoader &al,
+				 const DeviceLoader &dl,
 				 const VkAllocationCallbacks *alc,
 				 const std::function<NewPoolSizeCalculator> &calc = DefaultNewPoolSizeCalculator);
 
@@ -103,7 +103,7 @@ namespace FireLand
 				   const VkMemoryRequirements &req,
 				   hrs::flags<AllocationFlags> flags,
 				   VkDevice device,
-				   const AllocatorLoader &al,
+				   const DeviceLoader &dl,
 				   const VkAllocationCallbacks *alc,
 				   const std::function<NewPoolSizeCalculator> &calc = DefaultNewPoolSizeCalculator);
 
@@ -112,7 +112,7 @@ namespace FireLand
 					const VkMemoryRequirements &req,
 					hrs::flags<AllocationFlags> flags,
 					VkDevice device,
-					const AllocatorLoader &al,
+					const DeviceLoader &dl,
 					const VkAllocationCallbacks *alc,
 					const std::function<NewPoolSizeCalculator> &calc = DefaultNewPoolSizeCalculator);
 
@@ -120,7 +120,7 @@ namespace FireLand
 					 const MemoryTypeAcquireResult &mtar,
 					 MemoryPoolOnEmptyPolicy policy,
 					 VkDevice device,
-					 const AllocatorLoader &al,
+					 const DeviceLoader &dl,
 					 const VkAllocationCallbacks *alc);
 
 	private:
@@ -130,14 +130,14 @@ namespace FireLand
 						hrs::flags<AllocationFlags> flags,
 						const hrs::mem_req<VkDeviceSize> &mem_req,
 						VkDevice device,
-						const AllocatorLoader &al);
+						const DeviceLoader &dl);
 
 		hrs::expected<MemoryTypeAcquireResult, hrs::error>
 		allocate_pool_and_acquire(ResourceType res_type,
 								  const hrs::mem_req<VkDeviceSize> &req,
 								  hrs::flags<AllocationFlags> flags,
 								  VkDevice device,
-								  const AllocatorLoader &al,
+								  const DeviceLoader &dl,
 								  const VkAllocationCallbacks *alc,
 								  const std::function<NewPoolSizeCalculator> &calc);
 

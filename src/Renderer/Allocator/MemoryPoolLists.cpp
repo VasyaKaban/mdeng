@@ -1,13 +1,16 @@
 #include "MemoryPoolLists.h"
 #include "MemoryPool.h"
+#include "../Context/DeviceLoader.h"
 
 namespace FireLand
 {
-	void MemoryPoolLists::Clear(VkDevice device, const AllocatorLoader &al, const VkAllocationCallbacks *alc) noexcept
+	void MemoryPoolLists::Clear(VkDevice device,
+								const DeviceLoader &dl,
+								const VkAllocationCallbacks *alc) noexcept
 	{
 		for(auto &pool_list : pools)
 			for(auto &pool : pool_list)
-				pool.Destroy(device, al, alc);
+				pool.Destroy(device, dl, alc);
 	}
 
 	bool MemoryPoolLists::IsEmpty() const noexcept
@@ -52,14 +55,14 @@ namespace FireLand
 
 	void MemoryPoolLists::Release(Iterator pool,
 								  VkDevice device,
-								  const AllocatorLoader &al,
+								  const DeviceLoader &dl,
 								  const VkAllocationCallbacks *alc) noexcept
 	{
 		PoolContainer *pc = &pools[static_cast<std::size_t>(pool->GetType())];
 		hrs::assert_true_debug(hrs::is_iterator_part_of_range_debug(*pc, pool),
 							   "Passed iterator is not a part of this list!");
 
-		pool->Destroy(device, al, alc);
+		pool->Destroy(device, dl, alc);
 		pc->erase(pool);
 	}
 };

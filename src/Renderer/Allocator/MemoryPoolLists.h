@@ -18,7 +18,7 @@ namespace FireLand
 		~MemoryPoolLists() = default;
 		MemoryPoolLists(MemoryPoolLists &&l) = default;
 
-		void Clear(VkDevice device, const AllocatorLoader &al, const VkAllocationCallbacks *alc) noexcept;
+		void Clear(VkDevice device, const DeviceLoader &dl, const VkAllocationCallbacks *alc) noexcept;
 		bool IsEmpty() const noexcept;
 
 		PoolContainer & GetPools(MemoryPoolType type) noexcept;
@@ -28,7 +28,7 @@ namespace FireLand
 		void Rearrange(MemoryPoolType prev_type, Iterator it) noexcept;
 		void Release(Iterator pool,
 					 VkDevice device,
-					 const AllocatorLoader &al,
+					 const DeviceLoader &dl,
 					 const VkAllocationCallbacks *alc) noexcept;
 
 	private:

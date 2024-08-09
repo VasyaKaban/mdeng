@@ -1,5 +1,6 @@
 #include "MemoryType.h"
 #include "MemoryPool.h"
+#include "../Context/DeviceLoader.h"
 
 namespace FireLand
 {
@@ -61,16 +62,16 @@ namespace FireLand
 		  lists(std::move(mem_type.lists)) {}
 
 	void MemoryType::Destroy(VkDevice device,
-							 const AllocatorLoader &al,
+							 const DeviceLoader &dl,
 							 const VkAllocationCallbacks *alc) noexcept
 	{
-		lists.Clear(device, al, alc);
+		lists.Clear(device, dl, alc);
 	}
 
 	bool MemoryType::IsSatisfy(MemoryTypeSatisfyOp satisfy, VkMemoryPropertyFlags props) const noexcept
 	{
 		if(satisfy == MemoryTypeSatisfyOp::Any)
-			return (!props || static_cast<bool>(memory_property_flags & props));
+			return (!props || ((memory_property_flags & props) == props));
 		else
 			return (!props || memory_property_flags == props);
 	}
@@ -106,7 +107,7 @@ namespace FireLand
 						 const VkMemoryRequirements &req,
 						 hrs::flags<AllocationFlags> flags,
 						 VkDevice device,
-						 const AllocatorLoader &al,
+						 const DeviceLoader &dl,
 						 const VkAllocationCallbacks *alc,
 						 const std::function<NewPoolSizeCalculator> &calc)
 	{
@@ -124,7 +125,7 @@ namespace FireLand
 		if(!(flags & AllocationFlags::AllocateSeparatePool))
 		{
 			//try acquire
-			auto acq_exp = TryAcquire(res_type, req, flags, device, al, alc, calc);
+			auto acq_exp = TryAcquire(res_type, req, flags, device, dl, alc, calc);
 			if(acq_exp)
 				return *acq_exp;
 		}
@@ -132,7 +133,7 @@ namespace FireLand
 		if(!(flags & AllocationFlags::CreateOnExistedPools))
 		{
 			//try allocate
-			auto alloc_exp = TryAllocate(res_type, req, flags, device, al, alc, calc);
+			auto alloc_exp = TryAllocate(res_type, req, flags, device, dl, alc, calc);
 			if(alloc_exp)
 				return *alloc_exp;
 
@@ -155,7 +156,7 @@ namespace FireLand
 						   const VkMemoryRequirements &req,
 						   hrs::flags<AllocationFlags> flags,
 						   VkDevice device,
-						   const AllocatorLoader &al,
+						   const DeviceLoader &dl,
 						   const VkAllocationCallbacks *alc,
 						   const std::function<NewPoolSizeCalculator> &calc)
 	{
@@ -171,19 +172,19 @@ namespace FireLand
 		MemoryPoolType mem_type = MemoryPool::ToMemoryPoolType(res_type);
 
 		//first -> strict
-		auto acq_exp = acquire_existed(mem_type, res_type, flags, mem_req, device, al);
+		auto acq_exp = acquire_existed(mem_type, res_type, flags, mem_req, device, dl);
 		if(acq_exp)
 			return *acq_exp;
 
 		//second -> none
-		acq_exp = acquire_existed(MemoryPoolType::None, res_type, flags, mem_req, device, al);
+		acq_exp = acquire_existed(MemoryPoolType::None, res_type, flags, mem_req, device, dl);
 		if(acq_exp)
 			return *acq_exp;
 
 		//third -> mixed if allowed
 		if(flags & AllocationFlags::AllowPlaceWithMixedResources)
 		{
-			acq_exp = acquire_existed(mem_type, res_type, flags, mem_req, device, al);
+			acq_exp = acquire_existed(mem_type, res_type, flags, mem_req, device, dl);
 			if(acq_exp)
 				return *acq_exp;
 		}
@@ -196,7 +197,7 @@ namespace FireLand
 							const VkMemoryRequirements &req,
 							hrs::flags<AllocationFlags> flags,
 							VkDevice device,
-							const AllocatorLoader &al,
+							const DeviceLoader &dl,
 							const VkAllocationCallbacks *alc,
 							const std::function<NewPoolSizeCalculator> &calc)
 	{
@@ -209,13 +210,12 @@ namespace FireLand
 
 		//ignore AllocateSeparatePool and CreateOnExistedPools!
 		hrs::mem_req<VkDeviceSize> mem_req(req.size, req.alignment);
-		MemoryPoolType mem_type = MemoryPool::ToMemoryPoolType(res_type);
 
 		auto blk_exp = allocate_pool_and_acquire(res_type,
 												 mem_req,
 												 flags,
 												 device,
-												 al,
+												 dl,
 												 alc,
 												 calc);
 
@@ -232,7 +232,7 @@ namespace FireLand
 							 const MemoryTypeAcquireResult &mtar,
 							 MemoryPoolOnEmptyPolicy policy,
 							 VkDevice device,
-							 const AllocatorLoader &al,
+							 const DeviceLoader &dl,
 							 const VkAllocationCallbacks *alc)
 	{
 		hrs::assert_true_debug(hrs::is_iterator_part_of_range_debug(lists.GetPools(mtar.pool->GetType()),
@@ -246,7 +246,7 @@ namespace FireLand
 		if(policy == MemoryPoolOnEmptyPolicy::Free)
 		{
 			if(mtar.pool->IsEmpty())
-				lists.Release(mtar.pool, device, al, alc);
+				lists.Release(mtar.pool, device, dl, alc);
 		}
 	}
 
@@ -256,7 +256,7 @@ namespace FireLand
 								hrs::flags<AllocationFlags> flags,
 								const hrs::mem_req<VkDeviceSize> &mem_req,
 								VkDevice device,
-								const AllocatorLoader &al)
+								const DeviceLoader &dl)
 	{
 		for(auto pool_it = lists.GetPools(pool_type).begin();
 			 pool_it != lists.GetPools(pool_type).end();
@@ -269,7 +269,7 @@ namespace FireLand
 				{
 					if(!pool_it->GetMemory().IsMapped())
 					{
-						VkResult res = pool_it->GetMemory().MapMemory(device, al);
+						VkResult res = pool_it->GetMemory().MapMemory(device, dl);
 						if(res != VK_SUCCESS)
 							continue;
 					}
@@ -286,7 +286,7 @@ namespace FireLand
 										  const hrs::mem_req<VkDeviceSize> &req,
 										  hrs::flags<AllocationFlags> flags,
 										  VkDevice device,
-										  const AllocatorLoader &al,
+										  const DeviceLoader &dl,
 										  const VkAllocationCallbacks *alc,
 										  const std::function<NewPoolSizeCalculator> &calc)
 	{
@@ -308,7 +308,7 @@ namespace FireLand
 											   index,
 											   static_cast<bool>(flags & AllocationFlags::MapMemory),
 											   buffer_image_granularity,
-											   al,
+											   dl,
 											   alc);
 			if(pool_exp)
 			{

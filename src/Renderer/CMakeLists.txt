@@ -14,8 +14,11 @@ target_sources(
 		Vulkan/InitResult.h
 		Vulkan/InitResult.cpp
 		Vulkan/VkResultMeta.hpp
+		Vulkan/QueueFamilyIndex.h
 		Vulkan/codegen/loader_gen_decl.h
 		Vulkan/codegen/loader_gen_def.h
+		Vulkan/codegen/loader_check_begin.h
+		Vulkan/codegen/loader_check_end.h
 )
 
 target_sources(
@@ -28,16 +31,17 @@ target_sources(
 		Context/InstanceLoader.h
 		Context/InstanceLoader.cpp
 		Context/DeviceUtilizer.h
+		Context/DeviceLoader.h
+		Context/DeviceLoader.cpp
 
 		Context/codegen/GlobalLoader_gen.h
 		Context/codegen/InstanceLoader_gen.h
+		Context/codegen/DeviceLoader_gen.h
 )
 
 target_sources(
 	Renderer
 	    PRIVATE
-		Allocator/AllocatorLoader.h
-		Allocator/AllocatorLoader.cpp
 		Allocator/AllocatorResult.h
 		Allocator/Memory.h
 		Allocator/Memory.cpp
@@ -53,17 +57,18 @@ target_sources(
 		Allocator/Bounded.cpp
 		Allocator/BoundedSize.h
 		Allocator/BoundedSize.cpp
-
-		Allocator/codegen/AllocatorLoader_gen.h
 )
 
-set(TRANSFER_CHANNEL_FOLDER_SOURCES
-	TransferChannel/TransferChannel.h
-	TransferChannel/TransferChannel.cpp
-	TransferChannel/TransferBufferOp.hpp
-	TransferChannel/TransferImageOp.hpp
-	TransferChannel/Data.h
-	TransferChannel/Data.cpp)
+target_sources(
+	Renderer
+	    PRIVATE
+		TransferChannel/BoundedBufferSizeFillness.h
+		TransferChannel/BoundedBufferSizeFillness.cpp
+		TransferChannel/TransferBufferOp.h
+		TransferChannel/TransferImageOp.h
+		TransferChannel/TransferChannel.h
+		TransferChannel/TransferChannel.cpp
+)
 
 set(WORLD_FOLDER_SOURCES
 	World/RenderWorld/Stateful.h

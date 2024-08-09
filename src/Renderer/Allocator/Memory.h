@@ -6,7 +6,7 @@
 
 namespace FireLand
 {
-	class AllocatorLoader;
+	class DeviceLoader;
 
 	class Memory
 		: public hrs::non_copyable,
@@ -19,7 +19,7 @@ namespace FireLand
 		~Memory() = default;
 		Memory(Memory &&mem) noexcept;
 
-		void Free(VkDevice device, const AllocatorLoader &al, const VkAllocationCallbacks *alc) noexcept;
+		void Free(VkDevice device, const DeviceLoader &dl, const VkAllocationCallbacks *alc) noexcept;
 
 		bool IsAllocated() const noexcept;
 		bool IsMapped() const noexcept;
@@ -27,7 +27,7 @@ namespace FireLand
 		VkDeviceMemory GetDeviceMemory() const noexcept;
 		VkDeviceSize GetSize() const noexcept;
 
-		VkResult MapMemory(VkDevice device, const AllocatorLoader &ld) noexcept;
+		VkResult MapMemory(VkDevice device, const DeviceLoader &dl) noexcept;
 
 		template<typename T = std::byte>
 		T * GetMapPtr() noexcept

@@ -1,7 +1,7 @@
 #include "Memory.h"
 #include <utility>
 #include "hrs/debug.hpp"
-#include "AllocatorLoader.h"
+#include "../Context/DeviceLoader.h"
 
 namespace FireLand
 {
@@ -15,18 +15,18 @@ namespace FireLand
 		  size(std::exchange(mem.size, 0)),
 		  map_ptr(std::exchange(mem.map_ptr, nullptr)) {}
 
-	void Memory::Free(VkDevice device, const AllocatorLoader &al, const VkAllocationCallbacks *alc) noexcept
+	void Memory::Free(VkDevice device, const DeviceLoader &dl, const VkAllocationCallbacks *alc) noexcept
 	{
 		hrs::assert_true_debug(device != VK_NULL_HANDLE, "Device isn't created yet!");
 		if(IsMapped())
 		{
-			al.vkUnmapMemory(device, memory);
+			dl.vkUnmapMemory(device, memory);
 			map_ptr = nullptr;
 		}
 
 		if(IsAllocated())
 		{
-			al.vkFreeMemory(device, memory, alc);
+			dl.vkFreeMemory(device, memory, alc);
 			memory = VK_NULL_HANDLE;
 			size = 0;
 		}
@@ -53,7 +53,7 @@ namespace FireLand
 	}
 
 	VkResult Memory::MapMemory(VkDevice device,
-							   const AllocatorLoader &al) noexcept
+							   const DeviceLoader &dl) noexcept
 	{
 		if(IsMapped())
 			return VK_SUCCESS;
@@ -62,7 +62,7 @@ namespace FireLand
 		hrs::assert_true_debug(IsAllocated(), "Memory isn't allocated yet!");
 
 		void *ptr;
-		VkResult res = al.vkMapMemory(device, memory, 0, size, {}, &ptr);
+		VkResult res = dl.vkMapMemory(device, memory, 0, size, {}, &ptr);
 		if(res != VK_SUCCESS)
 			return res;
 

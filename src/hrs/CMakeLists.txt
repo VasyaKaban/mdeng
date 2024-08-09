@@ -20,8 +20,6 @@ Hrs
 		free_block_chain_base.hpp
 		sized_free_block_chain.hpp
 		unsized_free_block_chain.hpp
-		hint_cast_object.hpp
-		resource.hpp
 		stacktrace.hpp
 		demangle.hpp
 		dynamic_library.hpp

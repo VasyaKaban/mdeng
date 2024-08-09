@@ -1,28 +1,27 @@
 #include "Allocator.h"
 #include "../Context/InstanceLoader.h"
+#include "../Context/DeviceLoader.h"
+#include "../Vulkan/codegen/loader_check_begin.h"
 #include "Bounded.h"
-
 #include <ranges>
 
 namespace FireLand
 {
 	Allocator::Allocator(VkDevice _device,
-						 AllocatorLoader &&al,
+						 const DeviceLoader *_dl,
 						 VkDeviceSize _buffer_image_granularity,
 						 std::vector<MemoryType> &&_memory_types,
 						 std::function<NewPoolSizeCalculator> &&_pool_size_calc,
 						 const VkAllocationCallbacks *_allocation_callbacks) noexcept
 		: device(_device),
-		  loader(std::move(al)),
+		  dl(_dl),
 		  buffer_image_granularity(_buffer_image_granularity),
 		  memory_types(std::move(_memory_types)),
 		  pool_size_calc(std::move(_pool_size_calc)),
 		  allocation_callbacks(_allocation_callbacks) {}
 
 	Allocator::Allocator() noexcept
-		: device(VK_NULL_HANDLE),
-		  buffer_image_granularity(1),
-		  allocation_callbacks(nullptr) {}
+		: device(VK_NULL_HANDLE) {}
 
 	Allocator::~Allocator()
 	{
@@ -31,22 +30,22 @@ namespace FireLand
 
 	Allocator::Allocator(Allocator &&allocator) noexcept
 		: device(std::exchange(allocator.device, VK_NULL_HANDLE)),
-		  loader(std::move(allocator.loader)),
+		  dl(allocator.dl),
 		  buffer_image_granularity(allocator.buffer_image_granularity),
 		  memory_types(std::move(allocator.memory_types)),
 		  pool_size_calc(std::move(allocator.pool_size_calc)),
-		  allocation_callbacks(std::exchange(allocator.allocation_callbacks, nullptr)) {}
+		  allocation_callbacks(allocator.allocation_callbacks) {}
 
 	Allocator & Allocator::operator=(Allocator &&allocator) noexcept
 	{
 		Destroy();
 
 		device = std::exchange(allocator.device, VK_NULL_HANDLE);
-		loader = std::move(allocator.loader);
+		dl = allocator.dl;
 		buffer_image_granularity = allocator.buffer_image_granularity;
 		memory_types = std::move(allocator.memory_types);
 		pool_size_calc = std::move(allocator.pool_size_calc);
-		allocation_callbacks = std::exchange(allocator.allocation_callbacks, nullptr);
+		allocation_callbacks = allocator.allocation_callbacks;
 
 		return *this;
 	}
@@ -54,7 +53,7 @@ namespace FireLand
 	hrs::expected<Allocator, InitResult>
 	Allocator::Create(VkDevice _device,
 					  VkPhysicalDevice physical_device,
-					  PFN_vkGetDeviceProcAddr device_vkGetDeviceProcAddr,
+					  const DeviceLoader &_dl,
 					  const InstanceLoader &il,
 					  std::function<NewPoolSizeCalculator> &&_pool_size_calc,
 					  const VkAllocationCallbacks *_allocation_callbacks)
@@ -62,10 +61,24 @@ namespace FireLand
 		hrs::assert_true_debug(_device != VK_NULL_HANDLE, "Device isn't created yet!");
 		hrs::assert_true_debug(physical_device != VK_NULL_HANDLE, "Physical device isn't created yet!");
 
-		AllocatorLoader al;
-		LoaderInitResult al_init_res = al.Init(VK_NULL_HANDLE, nullptr, _device, device_vkGetDeviceProcAddr);
-		if(al_init_res.IsFailure())
-			return InitResult(al_init_res.GetRequiredFailureName());
+		FIRE_LAND_LOADER_CHECK_USE(il)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkGetPhysicalDeviceProperties)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkGetPhysicalDeviceMemoryProperties)
+		FIRE_LAND_LOADER_CHECK_UNUSE()
+		FIRE_LAND_LOADER_CHECK_USE(_dl)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkAllocateMemory)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkFreeMemory)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkUnmapMemory)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkMapMemory)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkCreateBuffer)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkBindBufferMemory)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkGetBufferMemoryRequirements)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkDestroyBuffer)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkCreateImage)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkBindImageMemory)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkGetImageMemoryRequirements)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkDestroyImage)
+		FIRE_LAND_LOADER_CHECK_UNUSE()
 
 		VkPhysicalDeviceProperties props;
 		il.vkGetPhysicalDeviceProperties(physical_device, &props);
@@ -86,7 +99,7 @@ namespace FireLand
 		}
 
 		return Allocator(_device,
-						 std::move(al),
+						 &_dl,
 						 buffer_image_granularity,
 						 std::move(_memory_types),
 						 std::move(_pool_size_calc),
@@ -96,7 +109,7 @@ namespace FireLand
 	void Allocator::Destroy() noexcept
 	{
 		for(auto &mem_type : memory_types)
-			mem_type.Destroy(device, loader, allocation_callbacks);
+			mem_type.Destroy(device, *dl, allocation_callbacks);
 
 		memory_types.clear();
 		allocation_callbacks = nullptr;
@@ -108,9 +121,9 @@ namespace FireLand
 		return device;
 	}
 
-	const AllocatorLoader & Allocator::GetAllocatorLoader() const noexcept
+	const DeviceLoader * Allocator::GetDeviceLoader() const noexcept
 	{
-		return loader;
+		return dl;
 	}
 
 	const std::vector<MemoryType> & Allocator::GetMemoryTypes() const noexcept
@@ -173,7 +186,7 @@ namespace FireLand
 													req,
 													mado.flags,
 													device,
-													loader,
+													*dl,
 													allocation_callbacks,
 													(calc ? calc : MemoryType::DefaultNewPoolSizeCalculator));
 
@@ -198,7 +211,7 @@ namespace FireLand
 													 req,
 													 mado.flags,
 													 device,
-													 loader,
+													 *dl,
 													 allocation_callbacks,
 													 (calc ? calc : MemoryType::DefaultNewPoolSizeCalculator));
 
@@ -222,7 +235,7 @@ namespace FireLand
 		hrs::assert_true_debug(hrs::is_iterator_part_of_range_debug(memory_types, bb.memory_type),
 							   "Memory type isn't a part of this allocator!");
 
-		bb.memory_type->Release(res_type, bb.acquire_data, policy, device, loader, allocation_callbacks);
+		bb.memory_type->Release(res_type, bb.acquire_data, policy, device, *dl, allocation_callbacks);
 	}
 
 	hrs::expected<std::pair<BoundedBuffer, std::size_t>, hrs::error>
@@ -233,30 +246,30 @@ namespace FireLand
 		hrs::assert_true_debug(IsCreated(), "Allocator isn't created yet!");
 
 		VkBuffer buffer;
-		VkResult res = loader.vkCreateBuffer(device, &info, allocation_callbacks, &buffer);
+		VkResult res = dl->vkCreateBuffer(device, &info, allocation_callbacks, &buffer);
 		if(res != VK_SUCCESS)
 			return res;
 
 		VkMemoryRequirements req;
-		loader.vkGetBufferMemoryRequirements(device, buffer, &req);
+		dl->vkGetBufferMemoryRequirements(device, buffer, &req);
 		auto alloc_exp = Allocate(req, ResourceType::Linear, desired, calc);
 		if(!alloc_exp)
 		{
-			loader.vkDestroyBuffer(device, buffer, allocation_callbacks);
+			dl->vkDestroyBuffer(device, buffer, allocation_callbacks);
 			return alloc_exp.error();
 		}
 
 		const auto &acq_data = alloc_exp->first.acquire_data;
-		res = loader.vkBindBufferMemory(device,
-										buffer,
-										acq_data.pool->GetMemory().GetDeviceMemory(),
-										acq_data.block.offset);
+		res = dl->vkBindBufferMemory(device,
+									 buffer,
+									 acq_data.pool->GetMemory().GetDeviceMemory(),
+									 acq_data.block.offset);
 
 		if(res != VK_SUCCESS)
 		{
 			//use policy = free because if pool is newly created then it must be deleted due to we need to return to the state as it was before allocation
 			Free(alloc_exp->first, MemoryPoolOnEmptyPolicy::Free, ResourceType::Linear);
-			loader.vkDestroyBuffer(device, buffer, allocation_callbacks);
+			dl->vkDestroyBuffer(device, buffer, allocation_callbacks);
 			return res;
 		}
 
@@ -272,7 +285,7 @@ namespace FireLand
 			return;
 
 		Free(bounded_buffer, policy, ResourceType::Linear);
-		loader.vkDestroyBuffer(device, bounded_buffer.buffer, allocation_callbacks);
+		dl->vkDestroyBuffer(device, bounded_buffer.buffer, allocation_callbacks);
 	}
 
 	hrs::expected<std::pair<BoundedImage, std::size_t>, hrs::error>
@@ -283,12 +296,12 @@ namespace FireLand
 		hrs::assert_true_debug(IsCreated(), "Allocator isn't created yet!");
 
 		VkImage image;
-		VkResult res = loader.vkCreateImage(device, &info, allocation_callbacks, &image);
+		VkResult res = dl->vkCreateImage(device, &info, allocation_callbacks, &image);
 		if(res != VK_SUCCESS)
 			return res;
 
 		VkMemoryRequirements req;
-		loader.vkGetImageMemoryRequirements(device, image, &req);
+		dl->vkGetImageMemoryRequirements(device, image, &req);
 
 		hrs::assert_true_debug(info.tiling != VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT,
 							   "Allocator doesn't support VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT! "
@@ -300,12 +313,12 @@ namespace FireLand
 		auto alloc_exp = Allocate(req, res_type, desired, calc);
 		if(!alloc_exp)
 		{
-			loader.vkDestroyImage(device, image, allocation_callbacks);
+			dl->vkDestroyImage(device, image, allocation_callbacks);
 			return alloc_exp.error();
 		}
 
 		const auto &acq_data = alloc_exp->first.acquire_data;
-		res = loader.vkBindImageMemory(device,
+		res = dl->vkBindImageMemory(device,
 									   image,
 									   acq_data.pool->GetMemory().GetDeviceMemory(),
 									   acq_data.block.offset);
@@ -313,7 +326,7 @@ namespace FireLand
 		if(res != VK_SUCCESS)
 		{
 			Free(alloc_exp->first, MemoryPoolOnEmptyPolicy::Free, res_type);
-			loader.vkDestroyImage(device, image, allocation_callbacks);
+			dl->vkDestroyImage(device, image, allocation_callbacks);
 			return res;
 		}
 
@@ -327,7 +340,7 @@ namespace FireLand
 			return;
 
 		Free(bounded_image, policy, bounded_image.image_type);
-		loader.vkDestroyImage(device, bounded_image.image, allocation_callbacks);
+		dl->vkDestroyImage(device, bounded_image.image, allocation_callbacks);
 	}
 
 	bool Allocator::is_memory_type_satisfy(const MemoryType &mem_type,
@@ -338,3 +351,5 @@ namespace FireLand
 		return mem_type.IsSatisfyIndex(req.memoryTypeBits) && mem_type.IsSatisfy(op, desired_props);
 	}
 };
+
+#include "../Vulkan/codegen/loader_check_end.h"

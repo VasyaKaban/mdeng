@@ -1,5 +1,5 @@
-#include "AllocatorLoader.h"
-#include "codegen/AllocatorLoader_gen.h"
+#include "DeviceLoader.h"
+#include "codegen/DeviceLoader_gen.h"
 
 namespace FireLand
 {
@@ -7,3 +7,4 @@ namespace FireLand
 };
 
 #undef LOADER_GEN_LIST
+
