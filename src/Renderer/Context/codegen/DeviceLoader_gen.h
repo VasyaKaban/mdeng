@@ -34,5 +34,13 @@
 		FIRE_LAND_LOADER_FUNCTION(vkFreeCommandBuffers) \
 		FIRE_LAND_LOADER_FUNCTION(vkCreateSemaphore) \
 		FIRE_LAND_LOADER_FUNCTION(vkDestroySemaphore) \
+ \
+		FIRE_LAND_LOADER_FUNCTION(vkCreateDescriptorSetLayout) \
+		FIRE_LAND_LOADER_FUNCTION(vkDestroyDescriptorSetLayout) \
+		FIRE_LAND_LOADER_FUNCTION(vkCreateDescriptorPool) \
+		FIRE_LAND_LOADER_FUNCTION(vkResetDescriptorPool) \
+		FIRE_LAND_LOADER_FUNCTION(vkDestroyDescriptorPool) \
+		FIRE_LAND_LOADER_FUNCTION(vkAllocateDescriptorSets) \
+		FIRE_LAND_LOADER_FUNCTION(vkFreeDescriptorSets) \
 	FIRE_LAND_LOADER_END()
 

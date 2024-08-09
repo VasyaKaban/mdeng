@@ -56,7 +56,7 @@ namespace hrs
 		constexpr ~scoped_call()
 		{
 			if(func)
-				func.value();
+				func.value()();
 		}
 
 		/**
@@ -172,7 +172,7 @@ namespace hrs
 		constexpr void call() const noexcept(std::is_nothrow_invocable_v<F>)
 		{
 			if(func)
-				func();
+				func.value()();
 		}
 
 	private:

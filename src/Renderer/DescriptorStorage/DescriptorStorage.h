@@ -2,56 +2,47 @@
 
 #include <list>
 #include <cstdint>
+#include <vector>
 #include "hrs/non_creatable.hpp"
 #include "hrs/expected.hpp"
-#include "../Vulkan/VulkanInclude.hpp"
+#include "../Vulkan/VulkanInclude.h"
+#include "../Vulkan/InitResult.h"
 
 namespace FireLand
 {
-	class Device;
 	class DescriptorPool;
+	class DeviceLoader;
 
 	struct DescriptorSetGroup
 	{
-		std::vector<vk::DescriptorSet> sets;
+		std::vector<VkDescriptorSet> sets;
 		DescriptorPool *parent_pool;
-
-		DescriptorSetGroup(std::vector<vk::DescriptorSet> &&_sets = {}, DescriptorPool *_parent_pool = {}) noexcept
-			: sets(std::move(_sets)), parent_pool(_parent_pool) {}
-
-		auto operator<=>(const DescriptorSetGroup &) const noexcept = default;
 	};
 
 	struct DescriptorPoolInfo
 	{
-		vk::DescriptorPoolCreateFlags flags;
+		VkDescriptorPoolCreateFlags flags;
 		std::uint32_t max_sets;
-		std::vector<vk::DescriptorPoolSize> pool_sizes;
+		std::vector<VkDescriptorPoolSize> pool_sizes;
 	};
 
 	class DescriptorStorage : public hrs::non_copyable
 	{
+	private:
+		DescriptorStorage(VkDevice _device,
+						  const DeviceLoader *_dl,
+						  const VkAllocationCallbacks *_allocation_callbacks,
+						  std::vector<VkDescriptorSetLayout> &&_descriptor_set_layouts,
+						  DescriptorPoolInfo &&_pool_info) noexcept;
+
 	public:
-		DescriptorStorage(Device *_parent_device = {},
-						  vk::DescriptorSetLayout _descriptor_set_layout = {},
-						  std::uint32_t set_layout_count = {},
-						  const DescriptorPoolInfo &_pool_info = {});
-		DescriptorStorage(Device *_parent_device = {},
-						  vk::DescriptorSetLayout _descriptor_set_layout = {},
-						  std::uint32_t set_layout_count = {},
-						  DescriptorPoolInfo &&_pool_info = {});
-
-		static hrs::expected<DescriptorStorage, vk::Result>
-		Create(Device *_parent_device,
-			   const vk::DescriptorSetLayoutCreateInfo &set_layout_info,
+		static hrs::expected<DescriptorStorage, InitResult>
+		Create(VkDevice _device,
+			   const DeviceLoader &_dl,
+			   const VkDescriptorSetLayoutCreateInfo &set_layout_info,
 			   std::uint32_t set_layout_count,
-			   const DescriptorPoolInfo &_pool_info);
-
-		static hrs::expected<DescriptorStorage, vk::Result>
-		Create(Device *_parent_device,
-			   const vk::DescriptorSetLayoutCreateInfo &set_layout_info,
-			   std::uint32_t set_layout_count,
-			   DescriptorPoolInfo &&_pool_info) noexcept;
+			   DescriptorPoolInfo &&_pool_info,
+			   const VkAllocationCallbacks *_allocation_callbacks);
 
 		~DescriptorStorage();
 		DescriptorStorage(DescriptorStorage &&storage) noexcept;
@@ -60,22 +51,26 @@ namespace FireLand
 		void Destroy();
 		bool IsCreated() const noexcept;
 
-		hrs::expected<DescriptorSetGroup, vk::Result> AllocateSetGroup();
+		hrs::expected<DescriptorSetGroup, VkResult> AllocateSetGroup();
 		void RetireSetGroup(const DescriptorSetGroup &group);
 		void FreeSetGroup(const DescriptorSetGroup &group);
 
 		void DestroyFoolPools() noexcept;
 
-		Device * GetParentDevice() noexcept;
-		const Device * GetParentDevice() const noexcept;
-		vk::DescriptorSetLayout GetDescriptorSetLayout() const noexcept;
+		VkDevice GetDevice() const noexcept;
+		const DeviceLoader * GetDeviceLoader() const noexcept;
+		VkDescriptorSetLayout GetDescriptorSetLayout() const noexcept;
+		const std::vector<VkDescriptorSetLayout> & GetDescriptorSetLayouts() const noexcept;
 		const DescriptorPoolInfo & GetPoolInfo() const noexcept;
+		const VkAllocationCallbacks * GetAllocationCallbacks() const noexcept;
+		std::uint32_t GetSetLayoutCount() const noexcept;
 
 	private:
-		Device *parent_device;
-		std::vector<vk::DescriptorSetLayout> descriptor_set_layouts;
+		VkDevice device;
+		const DeviceLoader *dl;
+		const VkAllocationCallbacks *allocation_callbacks;
+		std::vector<VkDescriptorSetLayout> descriptor_set_layouts;
 		DescriptorPoolInfo pool_info;
-
 		std::list<DescriptorPool> pools;
 	};
 };

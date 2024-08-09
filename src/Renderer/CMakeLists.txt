@@ -70,6 +70,15 @@ target_sources(
 		TransferChannel/TransferChannel.cpp
 )
 
+target_sources(
+	Renderer
+	    PRIVATE
+		DescriptorStorage/DescriptorPool.h
+		DescriptorStorage/DescriptorPool.cpp
+		DescriptorStorage/DescriptorStorage.h
+		DescriptorStorage/DescriptorStorage.cpp
+)
+
 set(WORLD_FOLDER_SOURCES
 	World/RenderWorld/Stateful.h
 	World/RenderWorld/PlainStateful.h
@@ -95,12 +104,6 @@ set(WORLD_FOLDER_SOURCES
 	World/ObjectWorld/ObjectInstance.cpp
 	World/ObjectWorld/ObjectMeshBinding.h
 	World/ObjectWorld/ObjectMeshBinding.cpp)
-
-set(DESCRIPTOR_STORAGE_FOLDER_SOURCES
-	DescriptorStorage/DescriptorPool.h
-	DescriptorStorage/DescriptorPool.cpp
-	DescriptorStorage/DescriptorStorage.h
-	DescriptorStorage/DescriptorStorage.cpp)
 
 set(DATA_INDEX_STORAGE_FOLDER_SOURCES
 	DataIndexStorage/IndexPool.h

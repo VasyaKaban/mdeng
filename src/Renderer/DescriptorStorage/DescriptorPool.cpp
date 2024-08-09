@@ -1,29 +1,34 @@
 #include "DescriptorPool.h"
 #include "DescriptorStorage.h"
-#include "../Context/Device.h"
+#include "../Context/DeviceLoader.h"
+#include "hrs/debug.hpp"
 
 namespace FireLand
 {
-	DescriptorPool::DescriptorPool(DescriptorStorage *_parent_storage,
-								   vk::DescriptorPool _pool,
-								   std::uint32_t _max_sets_count,
-								   std::uint32_t _issued_sets_count) noexcept
-		: parent_storage(_parent_storage),
+	DescriptorPool::DescriptorPool(DescriptorStorage *_storage,
+								   VkDescriptorPool _pool,
+								   std::uint32_t _max_set_count) noexcept
+		: storage(_storage),
 		  pool(_pool),
-		  max_sets_count(_max_sets_count),
-		  issued_sets_count(_issued_sets_count) {}
+		  max_set_count(_max_set_count),
+		  issued_sets_count(0) {}
 
-	hrs::expected<DescriptorPool, vk::Result>
-	DescriptorPool::Create(DescriptorStorage *_parent_storage, const vk::DescriptorPoolCreateInfo &info) noexcept
+	hrs::expected<DescriptorPool, VkResult>
+	DescriptorPool::Create(DescriptorStorage &_parent_storage,
+						   const VkDescriptorPoolCreateInfo &info) noexcept
 	{
-		if(!_parent_storage)
-			return DescriptorPool(_parent_storage, VK_NULL_HANDLE, 0, 0);
+		hrs::assert_true_debug(_parent_storage.IsCreated(), "Descriptor storage isn't created yet!");
 
-		auto [_pool_res, _pool] = _parent_storage->GetParentDevice()->GetHandle().createDescriptorPool(info);
-		if(_pool_res != vk::Result::eSuccess)
-			return _pool_res;
+		VkDescriptorPool _pool;
+		VkResult res = _parent_storage.GetDeviceLoader()
+			->vkCreateDescriptorPool(_parent_storage.GetDevice(),
+									 &info,
+									 _parent_storage.GetAllocationCallbacks(),
+									 &_pool);
+		if(res != VK_SUCCESS)
+			return res;
 
-		return DescriptorPool(_parent_storage, _pool, info.maxSets, 0);
+		return DescriptorPool(&_parent_storage, _pool, info.maxSets);
 	}
 
 	DescriptorPool::~DescriptorPool()
@@ -32,119 +37,149 @@ namespace FireLand
 	}
 
 	DescriptorPool::DescriptorPool(DescriptorPool &&d_pool) noexcept
-		: parent_storage(d_pool.parent_storage),
+		: storage(d_pool.storage),
 		  pool(std::exchange(d_pool.pool, VK_NULL_HANDLE)),
 		  free_sets(std::move(d_pool.free_sets)),
-		  max_sets_count(d_pool.max_sets_count),
+		  max_set_count(d_pool.max_set_count),
 		  issued_sets_count(d_pool.issued_sets_count) {}
 
 	DescriptorPool & DescriptorPool::operator=(DescriptorPool &&d_pool) noexcept
 	{
 		Destroy();
 
-		parent_storage = d_pool.parent_storage;
+		storage = d_pool.storage;
 		pool = std::exchange(d_pool.pool, VK_NULL_HANDLE);
 		free_sets = std::move(d_pool.free_sets);
-		max_sets_count = d_pool.max_sets_count;
+		max_set_count = d_pool.max_set_count;
 		issued_sets_count = d_pool.issued_sets_count;
 
 		return *this;
 	}
 
-	void DescriptorPool::Destroy()
+	void DescriptorPool::Destroy() noexcept
 	{
 		if(!IsCreated())
 			return;
 
-		vk::Device device_handle = parent_storage->GetParentDevice()->GetHandle();
-		device_handle.resetDescriptorPool(pool);
-		pool = (device_handle.destroy(pool), VK_NULL_HANDLE);
-		free_sets.clear();
-		issued_sets_count = 0;
+		ResetPool();
+		storage->GetDeviceLoader()
+			->vkDestroyDescriptorPool(storage->GetDevice(),
+									  pool,
+									  storage->GetAllocationCallbacks());
+		pool = VK_NULL_HANDLE;
 	}
 
 	bool DescriptorPool::IsCreated() const noexcept
 	{
-		return pool;
+		return pool != VK_NULL_HANDLE;
 	}
 
-	hrs::expected<std::vector<vk::DescriptorSet>, vk::Result>
-	DescriptorPool::AllocateSets(std::uint32_t count)
+	hrs::expected<std::vector<VkDescriptorSet>, VkResult> DescriptorPool::AllocateSets()
 	{
-		const std::vector<vk::DescriptorSetLayout> layouts(count, parent_storage->GetDescriptorSetLayout());
-		const vk::DescriptorSetAllocateInfo info(pool, layouts);
-		auto [sets_res, sets] = parent_storage->GetParentDevice()->GetHandle().allocateDescriptorSets(info);
-		if(sets_res != vk::Result::eSuccess)
-			return sets_res;
+		hrs::assert_true_debug(IsCreated(), "Descriptor pool isn't created yet!");
 
-		issued_sets_count += count;
-		return sets;
-	}
+		std::uint32_t count = storage->GetSetLayoutCount();
+		if(free_sets.size() >= count)
+		{
+			auto start_it = free_sets.begin() + (free_sets.size() - count);
+			std::vector<VkDescriptorSet> sets(start_it,free_sets.end());
+			free_sets.erase(start_it, free_sets.end());
+			issued_sets_count += count;
+			return sets;
+		}
+		else
+		{
+			const VkDescriptorSetAllocateInfo info =
+			{
+				.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+				.pNext = nullptr,
+				.descriptorPool = pool,
+				.descriptorSetCount = count,
+				.pSetLayouts = storage->GetDescriptorSetLayouts().data()
+			};
 
-	hrs::expected<std::vector<vk::DescriptorSet>, vk::Result>
-	DescriptorPool::AllocateSets(std::span<const vk::DescriptorSetLayout> layouts)
-	{
-		const vk::DescriptorSetAllocateInfo info(pool, layouts);
-		auto [sets_res, sets] = parent_storage->GetParentDevice()->GetHandle().allocateDescriptorSets(info);
-		if(sets_res != vk::Result::eSuccess)
-			return sets_res;
+			std::vector<VkDescriptorSet> sets(count, VK_NULL_HANDLE);
+			VkResult res = storage->GetDeviceLoader()
+							   ->vkAllocateDescriptorSets(storage->GetDevice(), &info, sets.data());
+			if(res != VK_SUCCESS)
+				return res;
 
-		issued_sets_count += layouts.size();
-		return sets;
+			issued_sets_count += count;
+			return res;
+		}
 	}
 
 	void DescriptorPool::ResetPool() noexcept
 	{
-		if(IsCreated())
-		{
-			parent_storage->GetParentDevice()->GetHandle().resetDescriptorPool(pool);
-			free_sets.clear();
-			issued_sets_count = 0;
-		}
+		hrs::assert_true_debug(IsCreated(), "Descriptor pool isn't created yet!");
+
+		[[maybe_unused]] VkResult _ =
+			storage->GetDeviceLoader()->vkResetDescriptorPool(storage->GetDevice(), pool, {});
+
+		issued_sets_count = 0;
+		free_sets.clear();
 	}
 
-	void DescriptorPool::RetireSets(std::span<const vk::DescriptorSet> sets)
+	void DescriptorPool::RetireSets(std::span<const VkDescriptorSet> sets)
 	{
+		hrs::assert_true_debug(IsCreated(), "Descripor pool isn't created yet!");
+		hrs::assert_true_debug(max_set_count >= sets.size() && issued_sets_count >= sets.size(),
+							   "Issued sets count: {}"
+							   " and max set count: {}"
+							   " both must be greater than or equal to requested free sets count: {}",
+							   issued_sets_count,
+							   max_set_count,
+							   sets.size());
+
 		if(sets.empty())
 			return;
 
-		if(IsCreated())
-		{
-			free_sets.insert(free_sets.end(), sets.begin(), sets.end());
-			issued_sets_count -= sets.size();
-		}
+		free_sets.insert(free_sets.end(), sets.begin(), sets.end());
+		issued_sets_count -= sets.size();
 	}
 
-	void DescriptorPool::FreeSets(std::span<const vk::DescriptorSet> sets) noexcept
+	void DescriptorPool::FreeSets(std::span<const VkDescriptorSet> sets) noexcept
 	{
+		hrs::assert_true_debug(IsCreated(), "Descriptor pool isn't created yet!");
+		hrs::assert_true_debug(max_set_count >= sets.size() && issued_sets_count >= sets.size(),
+							   "Issued sets count: {}"
+							   " and max set count: {}"
+							   " both must be greater than or equal to requested free sets count: {}",
+							   issued_sets_count,
+							   max_set_count,
+							   sets.size());
+
 		if(sets.empty())
 			return;
 
-		if(IsCreated())
-		{
-			parent_storage->GetParentDevice()->GetHandle().freeDescriptorSets(pool, sets);
-			issued_sets_count -= sets.size();
-		}
+		[[maybe_unused]] VkResult _ = storage
+										  ->GetDeviceLoader()
+										  ->vkFreeDescriptorSets(storage->GetDevice(),
+																 pool,
+																 sets.size(),
+																 sets.data());
+
+		issued_sets_count -= sets.size();
 	}
 
-	DescriptorStorage * DescriptorPool::GetParentStorage() noexcept
+	DescriptorStorage * DescriptorPool::GetStorage() noexcept
 	{
-		return parent_storage;
+		return storage;
 	}
 
-	const DescriptorStorage * DescriptorPool::GetParentStorage() const noexcept
+	const DescriptorStorage * DescriptorPool::GetStorage() const noexcept
 	{
-		return parent_storage;
+		return storage;
 	}
 
-	vk::DescriptorPool DescriptorPool::GetHandle() const noexcept
+	VkDescriptorPool DescriptorPool::GetHandle() const noexcept
 	{
 		return pool;
 	}
 
 	std::uint32_t DescriptorPool::GetMaxSetCount() const noexcept
 	{
-		return max_sets_count;
+		return max_set_count;
 	}
 
 	std::uint32_t DescriptorPool::GetIssuedSetCount() const noexcept

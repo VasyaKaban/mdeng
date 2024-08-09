@@ -1,55 +1,57 @@
 #include "DescriptorStorage.h"
-#include "../Context/Device.h"
 #include "DescriptorPool.h"
+#include "../Context/DeviceLoader.h"
+#include "hrs/debug.hpp"
+#include "../Vulkan/codegen/loader_check_begin.h"
 
 namespace FireLand
 {
-	DescriptorStorage::DescriptorStorage(Device *_parent_device,
-										vk::DescriptorSetLayout _descriptor_set_layout,
-										std::uint32_t set_layout_count,
-										const DescriptorPoolInfo &_pool_info)
-		: parent_device(_parent_device),
-		  descriptor_set_layouts(set_layout_count, _descriptor_set_layout),
-		  pool_info(_pool_info) {}
-
-	DescriptorStorage::DescriptorStorage(Device *_parent_device,
-										 vk::DescriptorSetLayout _descriptor_set_layout,
-										 std::uint32_t set_layout_count,
-										 DescriptorPoolInfo &&_pool_info)
-		: parent_device(_parent_device),
-		  descriptor_set_layouts(set_layout_count, _descriptor_set_layout),
+	DescriptorStorage::DescriptorStorage(VkDevice _device,
+										 const DeviceLoader *_dl,
+										 const VkAllocationCallbacks *_allocation_callbacks,
+										 std::vector<VkDescriptorSetLayout> &&_descriptor_set_layouts,
+										 DescriptorPoolInfo &&_pool_info) noexcept
+		: device(_device),
+		  dl(_dl),
+		  allocation_callbacks(_allocation_callbacks),
+		  descriptor_set_layouts(std::move(_descriptor_set_layouts)),
 		  pool_info(std::move(_pool_info)) {}
 
-	hrs::expected<DescriptorStorage, vk::Result>
-	DescriptorStorage::Create(Device *_parent_device,
-							  const vk::DescriptorSetLayoutCreateInfo &set_layout_info,
+	hrs::expected<DescriptorStorage, InitResult>
+	DescriptorStorage::Create(VkDevice _device,
+							  const DeviceLoader &_dl,
+							  const VkDescriptorSetLayoutCreateInfo &set_layout_info,
 							  std::uint32_t set_layout_count,
-							  const DescriptorPoolInfo &_pool_info)
+							  DescriptorPoolInfo &&_pool_info,
+							  const VkAllocationCallbacks *_allocation_callbacks)
 	{
-		if(!_parent_device)
-			return DescriptorStorage(_parent_device, VK_NULL_HANDLE, set_layout_count, _pool_info);
+		hrs::assert_true_debug(_device != VK_NULL_HANDLE, "Device isn't created yet!");
+		hrs::assert_true_debug(set_layout_count != 0, "Count of layouts must greater than zero!");
 
-		auto [layout_res, layout] = _parent_device->GetHandle().createDescriptorSetLayout(set_layout_info);
-		if(layout_res != vk::Result::eSuccess)
-			return layout_res;
+		FIRE_LAND_LOADER_CHECK_USE(_dl)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkCreateDescriptorSetLayout)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkDestroyDescriptorSetLayout)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkCreateDescriptorPool)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkResetDescriptorPool)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkDestroyDescriptorPool)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkAllocateDescriptorSets)
+			FIRE_LAND_LOADER_CHECK_FUNCTION(vkFreeDescriptorSets)
+		FIRE_LAND_LOADER_CHECK_UNUSE()
 
-		return DescriptorStorage(_parent_device, layout, set_layout_count, _pool_info);
-	}
+		VkDescriptorSetLayout set_layout;
+		VkResult res = _dl.vkCreateDescriptorSetLayout(_device,
+													   &set_layout_info,
+													   _allocation_callbacks,
+													   &set_layout);
 
-	hrs::expected<DescriptorStorage, vk::Result>
-	DescriptorStorage::Create(Device *_parent_device,
-							  const vk::DescriptorSetLayoutCreateInfo &set_layout_info,
-							  std::uint32_t set_layout_count,
-							  DescriptorPoolInfo &&_pool_info) noexcept
-	{
-		if(!_parent_device)
-			return DescriptorStorage(_parent_device, VK_NULL_HANDLE, set_layout_count, _pool_info);
+		if(res != VK_SUCCESS)
+			return res;
 
-		auto [layout_res, layout] = _parent_device->GetHandle().createDescriptorSetLayout(set_layout_info);
-		if(layout_res != vk::Result::eSuccess)
-			return layout_res;
-
-		return DescriptorStorage(_parent_device, layout, set_layout_count, std::move(_pool_info));
+		return DescriptorStorage(_device,
+								 &_dl,
+								 _allocation_callbacks,
+								 std::vector<VkDescriptorSetLayout>(set_layout_count, set_layout),
+								 std::move(_pool_info));
 	}
 
 	DescriptorStorage::~DescriptorStorage()
@@ -58,7 +60,9 @@ namespace FireLand
 	}
 
 	DescriptorStorage::DescriptorStorage(DescriptorStorage &&storage) noexcept
-		: parent_device(storage.parent_device),
+		: device(std::exchange(storage.device, VK_NULL_HANDLE)),
+		  dl(storage.dl),
+		  allocation_callbacks(storage.allocation_callbacks),
 		  descriptor_set_layouts(std::move(storage.descriptor_set_layouts)),
 		  pool_info(std::move(storage.pool_info)),
 		  pools(std::move(storage.pools)) {}
@@ -67,7 +71,9 @@ namespace FireLand
 	{
 		Destroy();
 
-		parent_device = storage.parent_device;
+		device = std::exchange(storage.device, VK_NULL_HANDLE);
+		dl = storage.dl;
+		allocation_callbacks = storage.allocation_callbacks;
 		descriptor_set_layouts = std::move(storage.descriptor_set_layouts);
 		pool_info = std::move(storage.pool_info);
 		pools = std::move(storage.pools);
@@ -81,62 +87,63 @@ namespace FireLand
 			return;
 
 		pools.clear();
-		vk::Device device_handle = parent_device->GetHandle();
-		for(auto layout : descriptor_set_layouts)
-			device_handle.destroyDescriptorSetLayout(layout);
-
+		pool_info = {};
+		dl->vkDestroyDescriptorSetLayout(device, descriptor_set_layouts[0], allocation_callbacks);
 		descriptor_set_layouts.clear();
+		device = VK_NULL_HANDLE;
 	}
 
 	bool DescriptorStorage::IsCreated() const noexcept
 	{
-		return !descriptor_set_layouts.empty() && descriptor_set_layouts[0];
+		return device != VK_NULL_HANDLE;
 	}
 
-	hrs::expected<DescriptorSetGroup, vk::Result> DescriptorStorage::AllocateSetGroup()
+	hrs::expected<DescriptorSetGroup, VkResult> DescriptorStorage::AllocateSetGroup()
 	{
+		hrs::assert_true_debug(IsCreated(), "Descriptor storage isn't created yet!");
+
 		for(auto &pool : pools)
 		{
-			auto set_exp = pool.AllocateSets(descriptor_set_layouts);
-			if(set_exp)
-				return DescriptorSetGroup(std::move(set_exp.value()), &pool);
-			else
-			{
-				switch(set_exp.error())
-				{
-					case vk::Result::eErrorFragmentedPool:
-					case vk::Result::eErrorOutOfPoolMemory:
-						break;
-					default:
-						return set_exp.error();
-						break;
-				}
-			}
+			auto alloc_exp = pool.AllocateSets();
+			if(alloc_exp)
+				return DescriptorSetGroup{std::move(*alloc_exp), &pool};
 		}
 
-		const vk::DescriptorPoolCreateInfo info(pool_info.flags, pool_info.max_sets, pool_info.pool_sizes);
-		auto pool_exp = DescriptorPool::Create(this, info);
+		const VkDescriptorPoolCreateInfo pool_create_info =
+		{
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+			.pNext = nullptr,
+			.flags = pool_info.flags,
+			.maxSets = pool_info.max_sets,
+			.poolSizeCount = static_cast<std::uint32_t>(pool_info.pool_sizes.size()),
+			.pPoolSizes = pool_info.pool_sizes.data()
+		};
+
+		auto pool_exp = DescriptorPool::Create(*this, pool_create_info);
 		if(!pool_exp)
 			return pool_exp.error();
 
-		auto set_exp = pool_exp.value().AllocateSets(descriptor_set_layouts);
-		if(!set_exp)
-		{
-			pool_exp.value().Destroy();
-			return set_exp.error();
-		}
+		auto alloc_exp = pool_exp->AllocateSets();
+		if(!alloc_exp)
+			return alloc_exp.error();
 
-		pools.push_back(std::move(pool_exp.value()));
-		return DescriptorSetGroup(std::move(set_exp.value()), &*std::prev(pools.end()));
+		pools.push_back(std::move(*pool_exp));
+		return DescriptorSetGroup{std::move(*alloc_exp), &pools.back()};
 	}
 
 	void DescriptorStorage::RetireSetGroup(const DescriptorSetGroup &group)
 	{
+		hrs::assert_true_debug(IsCreated(), "Descriptor storage isn't created yet!");
+		hrs::assert_true_debug(group.parent_pool != nullptr, "Descriptor pool is null!");
+
 		group.parent_pool->RetireSets(group.sets);
 	}
 
 	void DescriptorStorage::FreeSetGroup(const DescriptorSetGroup &group)
 	{
+		hrs::assert_true_debug(IsCreated(), "Descriptor storage isn't created yet!");
+		hrs::assert_true_debug(group.parent_pool != nullptr, "Descriptor pool is null!");
+
 		group.parent_pool->FreeSets(group.sets);
 	}
 
@@ -148,23 +155,42 @@ namespace FireLand
 		});
 	}
 
-	Device * DescriptorStorage::GetParentDevice() noexcept
+	VkDevice DescriptorStorage::GetDevice() const noexcept
 	{
-		return parent_device;
+		return device;
 	}
 
-	const Device * DescriptorStorage::GetParentDevice() const noexcept
+	const DeviceLoader * DescriptorStorage::GetDeviceLoader() const noexcept
 	{
-		return parent_device;
+		return dl;
 	}
 
-	vk::DescriptorSetLayout DescriptorStorage::GetDescriptorSetLayout() const noexcept
+	VkDescriptorSetLayout DescriptorStorage::GetDescriptorSetLayout() const noexcept
 	{
+		if(descriptor_set_layouts.empty())
+			return VK_NULL_HANDLE;
+
 		return descriptor_set_layouts[0];
+	}
+
+	const std::vector<VkDescriptorSetLayout> &
+	DescriptorStorage::GetDescriptorSetLayouts() const noexcept
+	{
+		return descriptor_set_layouts;
 	}
 
 	const DescriptorPoolInfo & DescriptorStorage::GetPoolInfo() const noexcept
 	{
 		return pool_info;
+	}
+
+	const VkAllocationCallbacks * DescriptorStorage::GetAllocationCallbacks() const noexcept
+	{
+		return allocation_callbacks;
+	}
+
+	std::uint32_t DescriptorStorage::GetSetLayoutCount() const noexcept
+	{
+		return descriptor_set_layouts.size();
 	}
 };
