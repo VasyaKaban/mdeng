@@ -29,6 +29,9 @@ Hrs
 		copy_traits.hpp
 		on_thread_exit.hpp
 		swap_back_pop.hpp
+		function_traits.hpp
+		member_class.hpp
+		ref.hpp
 )
 
 if(UNIX)
@@ -106,6 +109,7 @@ Hrs
     PRIVATE
 	    static_string/static_string.hpp
 		static_string/algorithm.hpp
+		static_string/compare.hpp
 )
 
 target_sources(

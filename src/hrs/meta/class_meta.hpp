@@ -5,21 +5,12 @@
 #include "../static_string/static_string.hpp"
 #include "meta_attributes.hpp"
 #include "split_namespace.hpp"
+#include "../member_class.hpp"
 
 namespace hrs
 {
 	namespace detail
 	{
-		template<typename>
-		struct member_class_type {};
-
-		template<typename C, typename T>
-		struct member_class_type<T C::*>
-		{
-			using field_type = T;
-			using class_type = C;
-		};
-
 		template<typename C,
 				  hrs::static_string _name,
 				  hrs::non_type_instantiation<meta_attributes> _attributes>
@@ -38,10 +29,10 @@ namespace hrs
 	template<auto _ptr, hrs::static_string _name, auto ..._attrs>
 	struct member_field : public meta_attributes<_attrs...>
 	{
-		using type = detail::member_class_type<decltype(_ptr)>::field_type;
+		using type = member_class_type<decltype(_ptr)>::field_type;
 		constexpr static auto name = _name;
 		constexpr static auto ptr = _ptr;
-		using class_type = typename detail::member_class_type<decltype(_ptr)>::class_type;
+		using class_type = typename member_class_type<decltype(_ptr)>::class_type;
 
 		template<typename C>
 			requires

@@ -111,6 +111,7 @@ set(DATA_INDEX_STORAGE_FOLDER_SOURCES
 	DataIndexStorage/DataIndexStorage.h
 	DataIndexStorage/DataIndexStorage.cpp)
 
+#make version for static objects and dynamic
 set(DATA_BUFFER_FOLDER_SOURCES
 	DataBuffer/DataQueue.h
 	DataBuffer/DataQueue.cpp

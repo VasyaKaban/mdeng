@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_subdirectory(src/hrs)
 add_subdirectory(src/Renderer)
+add_subdirectory(src/LuaWay)
 #add_subdirectory(src/GeometryParser)
 #add_subdirectory(src/WindowSubSystem)
 
@@ -29,6 +30,7 @@ set(CMAKE_CXX_FLAGS_DEBUG "-rdynamic -g")
 target_link_libraries(${PROJECT_NAME}
 	                    PRIVATE Hrs
 						PRIVATE Renderer
+						PRIVATE LuaWay
 						#PRIVATE GeometryParser
 						#PRIVATE WindowSubSystem
 					)
