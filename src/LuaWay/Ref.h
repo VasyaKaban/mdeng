@@ -42,42 +42,42 @@ namespace LuaWay
 		int GetRawIndex() const noexcept;
 
 		Ref GetMetatable() const noexcept;
-		void SetMetatable(Ref mt) noexcept;
+		void SetMetatable(Ref mt) const noexcept;
 
 		std::size_t GetLength() const noexcept;
 
-		Ref GetRefByIndex(int index) noexcept;
+		void SetEnv(Ref env) const noexcept;
 
 		template<Retrievable T>
-		std::optional<T> Retrieve() noexcept(NoexceptRetrievable<T>);
+		std::optional<T> Retrieve() const noexcept(NoexceptRetrievable<T>);
 
 		template<typename Call, Pushable ...Args>
 			requires std::same_as<Call, RefCallPlain> || std::same_as<Call, RefCallProtected>
-		auto Call(Args &&...args);
+		auto Call(Args &&...args) const;
 
 		template<Pushable ...Args>
-		hrs::expected<FunctionResult, Status> operator()(Args &&...args);
+		hrs::expected<FunctionResult, Status> operator()(Args &&...args) const;
 
 		template<Pushable K>
-		Ref GetRef(K &&key) noexcept(NoexceptPushable<K>);
+		Ref GetRef(K &&key) const noexcept(NoexceptPushable<K>);
 
 		template<Pushable K>
-		Ref GetRefRaw(K &&key) noexcept(NoexceptPushable<K>);
+		Ref GetRefRaw(K &&key) const noexcept(NoexceptPushable<K>);
 
 		template<Retrievable T, Pushable K>
-		/*std::optional<T>*/ auto Get(K &&key) noexcept(NoexceptPushable<K> && NoexceptRetrievable<T>);
+		auto Get(K &&key) const noexcept(NoexceptPushable<K> && NoexceptRetrievable<T>);
 
 		template<Retrievable T, Pushable K>
-		/*std::optional<T>*/ auto GetRaw(K &&key) noexcept(NoexceptPushable<K> && NoexceptRetrievable<T>);
+		auto GetRaw(K &&key) const noexcept(NoexceptPushable<K> && NoexceptRetrievable<T>);
 
 		template<Pushable K, Pushable V>
-		void Set(K &&key, V &&value) noexcept(NoexceptPushable<K> && NoexceptPushable<V>);
+		void Set(K &&key, V &&value) const noexcept(NoexceptPushable<K> && NoexceptPushable<V>);
 
 		template<Pushable K, Pushable V>
-		void SetRaw(K &&key, V &&value) noexcept(NoexceptPushable<K> && NoexceptPushable<V>);
+		void SetRaw(K &&key, V &&value) const noexcept(NoexceptPushable<K> && NoexceptPushable<V>);
 
 		template<Retrievable T>
-		/*std::optional<T>*/ auto As() noexcept(NoexceptRetrievable<T>);
+		auto As() const noexcept(NoexceptRetrievable<T>);
 
 		RefIterator begin() const noexcept;
 		RefIterator end() const noexcept;
@@ -103,7 +103,7 @@ namespace LuaWay
 	};
 
 	template<Retrievable T>
-	std::optional<T> Ref::Retrieve() noexcept(NoexceptRetrievable<T>)
+	std::optional<T> Ref::Retrieve() const noexcept(NoexceptRetrievable<T>)
 	{
 		VmType vm_type = LuaWay::GetType(state, -1);
 		if(!Stack<T>::ConvertibleFromVm(vm_type))
@@ -114,7 +114,7 @@ namespace LuaWay
 
 	template<typename Call, Pushable ...Args>
 		requires std::same_as<Call, RefCallPlain> || std::same_as<Call, RefCallProtected>
-	auto Ref::Call(Args &&...args)
+	auto Ref::Call(Args &&...args) const
 	{
 		hrs::assert_true_debug(IsCreated(), "Lua reference isn't created yet!");
 
@@ -123,7 +123,7 @@ namespace LuaWay
 									   hrs::expected<FunctionResult, Status>>;
 
 		lua_getref(state, ref);
-		(Stack<std::remove_cvref_t<Args>>::Push(std::forward<Args>(args)), ...);
+		((Stack<std::remove_cvref_t<Args>>::Push(std::forward<Args>(args))), ...);
 		int pre_push_index = lua_gettop(state);
 		int post_call_index;
 		if constexpr(std::same_as<Call, RefCallProtected>)
@@ -160,13 +160,13 @@ namespace LuaWay
 	}
 
 	template<Pushable ...Args>
-	hrs::expected<FunctionResult, Status> Ref::operator()(Args &&...args)
+	hrs::expected<FunctionResult, Status> Ref::operator()(Args &&...args) const
 	{
 		return Call<RefCallProtected>(std::forward<Args>(args)...);
 	}
 
 	template<Pushable K>
-	Ref Ref::GetRef(K &&key) noexcept(NoexceptPushable<K>)
+	Ref Ref::GetRef(K &&key) const noexcept(NoexceptPushable<K>)
 	{
 		hrs::assert_true_debug(IsCreated(), "Lua reference isn't created yet!");
 
@@ -180,7 +180,7 @@ namespace LuaWay
 	}
 
 	template<Pushable K>
-	Ref Ref::GetRefRaw(K &&key) noexcept(NoexceptPushable<K>)
+	Ref Ref::GetRefRaw(K &&key) const noexcept(NoexceptPushable<K>)
 	{
 		hrs::assert_true_debug(IsCreated(), "Lua reference isn't created yet!");
 
@@ -194,7 +194,7 @@ namespace LuaWay
 	}
 
 	template<Retrievable T, Pushable K>
-	/*std::optional<T>*/ auto Ref::Get(K &&key) noexcept(NoexceptPushable<K> && NoexceptRetrievable<T>)
+	auto Ref::Get(K &&key) const noexcept(NoexceptPushable<K> && NoexceptRetrievable<T>)
 	{
 		hrs::assert_true_debug(IsCreated(), "Lua reference isn't created yet!");
 
@@ -217,8 +217,8 @@ namespace LuaWay
 	}
 
 	template<Retrievable T, Pushable K>
-	/*std::optional<T>*/ auto Ref::GetRaw(K &&key) noexcept(NoexceptPushable<K> &&
-															NoexceptRetrievable<T>)
+	auto Ref::GetRaw(K &&key) const noexcept(NoexceptPushable<K> &&
+											 NoexceptRetrievable<T>)
 	{
 		hrs::assert_true_debug(IsCreated(), "Lua reference isn't created yet!");
 
@@ -241,7 +241,7 @@ namespace LuaWay
 	}
 
 	template<Pushable K, Pushable V>
-	void Ref::Set(K &&key, V &&value) noexcept(NoexceptPushable<K> && NoexceptPushable<V>)
+	void Ref::Set(K &&key, V &&value) const noexcept(NoexceptPushable<K> && NoexceptPushable<V>)
 	{
 		hrs::assert_true_debug(IsCreated(), "Lua reference isn't created yet!");
 
@@ -254,7 +254,7 @@ namespace LuaWay
 	}
 
 	template<Pushable K, Pushable V>
-	void Ref::SetRaw(K &&key, V &&value) noexcept(NoexceptPushable<K> && NoexceptPushable<V>)
+	void Ref::SetRaw(K &&key, V &&value) const noexcept(NoexceptPushable<K> && NoexceptPushable<V>)
 	{
 		hrs::assert_true_debug(IsCreated(), "Lua reference isn't created yet!");
 
@@ -267,7 +267,7 @@ namespace LuaWay
 	}
 
 	template<Retrievable T>
-	/*std::optional<T>*/ auto Ref::As() noexcept(NoexceptRetrievable<T>)
+	auto Ref::As() const noexcept(NoexceptRetrievable<T>)
 	{
 		hrs::assert_true_debug(IsCreated(), "Lua reference isn't created yet!");
 

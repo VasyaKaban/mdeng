@@ -120,7 +120,7 @@ namespace LuaWay
 		return mt;
 	}
 
-	void Ref::SetMetatable(Ref mt) noexcept
+	void Ref::SetMetatable(Ref mt) const noexcept
 	{
 		hrs::assert_true_debug(IsCreated(), "Lua reference isn't created yet!");
 
@@ -138,6 +138,17 @@ namespace LuaWay
 		std::size_t len = lua_objlen(state, -1);
 		lua_pop(state, 1);
 		return len;
+	}
+
+	void Ref::SetEnv(Ref env) const noexcept
+	{
+		hrs::assert_true_debug(IsCreated(), "Lua reference isn't created yet!");
+		hrs::assert_true_debug(IsCreated(), "Lua env reference isn't created yet!");
+
+		Stack<Ref>::Push(state, *this);
+		Stack<Ref>::Push(state, env);
+		lua_setfenv(state, -2);
+		lua_pop(state, 1);
 	}
 
 	RefIterator Ref::begin() const noexcept

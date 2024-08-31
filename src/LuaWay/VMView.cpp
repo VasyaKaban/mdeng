@@ -19,4 +19,14 @@ namespace LuaWay
 		state = std::exchange(vm.state, nullptr);
 		return *this;
 	}
+
+	bool VMView::IsMainThread() const noexcept
+	{
+		if(!state)
+			return false;
+
+		int res = lua_pushthread(state);
+		lua_pop(state, 1);
+		return res == 1;
+	}
 };

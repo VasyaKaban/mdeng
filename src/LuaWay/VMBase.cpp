@@ -7,7 +7,7 @@ namespace LuaWay
 		: state(_state) {}
 
 	void VMBase::RegisterLibrary(const char *library_name,
-								 std::span<const luaL_Reg> functions) noexcept
+								 std::span<const luaL_Reg> functions) const noexcept
 	{
 		hrs::assert_true_debug(IsOpen(), "Lua VM isn't opened yet!");
 
@@ -89,15 +89,6 @@ namespace LuaWay
 		hrs::assert_true_debug(IsOpen(), "Lua VM isn't opened yet!");
 
 		lua_newuserdata(state, size);
-		int ref = luaL_ref(state, LUA_REGISTRYINDEX);
-		return Ref(state, ref);
-	}
-
-	Ref VMBase::CreateThread() const noexcept
-	{
-		hrs::assert_true_debug(IsOpen(), "Lua VM isn't opened yet!");
-
-		lua_newthread(state);
 		int ref = luaL_ref(state, LUA_REGISTRYINDEX);
 		return Ref(state, ref);
 	}
@@ -202,6 +193,17 @@ namespace LuaWay
 		return lua_gettop(state);
 	}
 
+	void VMBase::SetEnvForGlobal(const char *name, Ref env) const noexcept
+	{
+		hrs::assert_true_debug(IsOpen(), "Lua VM isn't opened yet!");
+		hrs::assert_true_debug(IsOpen(), "Lua env reference isn't created yet!");
+
+		lua_getglobal(state, name);
+		Stack<Ref>::Push(state, env);
+		lua_setfenv(state, -2);
+		lua_pop(state, 1);
+	}
+
 	void VMBase::DropGlobal(const char *name) const noexcept
 	{
 		SetGlobal(name, nil);
@@ -250,7 +252,7 @@ namespace LuaWay
 			return status;
 		}
 
-			   //<post>, results, <pre>
+		//<post>, results, <pre>
 		std::size_t result_count = post_call_index - pre_push_index;
 
 		FunctionResult result;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstring>
 #include <string>
 #include <variant>
 #include "Stack.h"
@@ -120,5 +121,21 @@ namespace LuaWay
 		static void Push(lua_State *state, Type value) noexcept;
 		static Type Retrieve(lua_State *state, int index) noexcept;
 		static bool ConvertibleFromVm(VmType vm_type) noexcept;
+	};
+
+	template<std::size_t N>
+	struct Stack<char [N]>
+	{
+		using Type = char [N];
+
+		static void Push(lua_State *state, const Type &value) noexcept
+		{
+			lua_pushstring(state, value);
+		}
+
+		static bool ConvertibleFromVm(VmType vm_type) noexcept
+		{
+			return vm_type == VmType::String;
+		}
 	};
 };

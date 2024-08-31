@@ -27,7 +27,7 @@ namespace LuaWay
 		VMBase & operator=(VMBase &&vm) = default;
 
 		void RegisterLibrary(const char *library_name,
-							 std::span<const luaL_Reg> functions) noexcept;
+							 std::span<const luaL_Reg> functions) const noexcept;
 
 		bool IsOpen() const noexcept;
 
@@ -35,12 +35,12 @@ namespace LuaWay
 		hrs::expected<Ref, Status> LoadFile(const std::filesystem::path fpath) const noexcept;
 
 		hrs::expected<FunctionResult, Status> DoString(const char *str, Ref env) const noexcept;
-		hrs::expected<FunctionResult, Status> DoFile(const std::filesystem::path fpath, Ref env) const noexcept;
+		hrs::expected<FunctionResult, Status> DoFile(const std::filesystem::path fpath,
+													 Ref env) const noexcept;
 
 		Thread GetState() const noexcept;
 
 		Ref AllocateUserData(std::size_t size) const noexcept;
-		Ref CreateThread() const noexcept;
 		Ref CreateTable(int array_count, int table_count) const noexcept;
 
 		CFunction SetAtPanic(CFunction at_panic_func) const noexcept;
@@ -58,12 +58,14 @@ namespace LuaWay
 		VmType GetStackValueType(int index) const noexcept;
 		std::size_t GetStackFillness() const noexcept;
 
+		void SetEnvForGlobal(const char *name, Ref env) const noexcept;
+
 		void DropGlobal(const char *name) const noexcept;
 
 		Ref GetGlobal(const char *name) const noexcept;
 
 		template<Retrievable T>
-		auto GetGlobalAs(const char *name) noexcept(NoexceptRetrievable<T>);
+		auto GetGlobalAs(const char *name) const noexcept(NoexceptRetrievable<T>);
 
 		template<Pushable T>
 		void SetGlobal(const char *name, T &&value) const noexcept(NoexceptPushable<T>);
@@ -80,7 +82,7 @@ namespace LuaWay
 	};
 
 	template<Retrievable T>
-	auto VMBase::GetGlobalAs(const char *name) noexcept(NoexceptRetrievable<T>)
+	auto VMBase::GetGlobalAs(const char *name) const noexcept(NoexceptRetrievable<T>)
 	{
 		hrs::assert_true_debug(IsOpen(), "Lua VM isn't opened yet!");
 

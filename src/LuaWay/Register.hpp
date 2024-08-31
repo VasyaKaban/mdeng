@@ -6,7 +6,6 @@
 #include "hrs/function_traits.hpp"
 #include "hrs/member_class.hpp"
 #include "NativeType.h"
-#include "Common.h"
 
 namespace LuaWay
 {
@@ -19,10 +18,10 @@ namespace LuaWay
 			assert(false);
 		}
 
-//#error SYNCHRONIZE Ref::As with Register in the Stack::Retrieve because it can return hrs::ref and we need to dereference it!
 		template<auto func, typename R, typename ...Args, std::size_t ...Indices>
-		int call_plain(lua_State *state, std::index_sequence<Indices...>)
+		int call_plain(lua_State *state, std::index_sequence<Indices...>) noexcept
 		{
+#warning ADD SYNC FOR REF.state because it can be called from coroutine!!! -> CHECK LUA_RIDX_MAINTHREAD
 			if constexpr(std::same_as<R, void>)
 			{
 				func(std::forward<Args>(Stack<std::remove_cvref_t<Args>>::
@@ -44,7 +43,7 @@ namespace LuaWay
 		}
 
 		template<auto func, typename C, typename R, typename ...Args, std::size_t ...Indices>
-		int call_member(lua_State *state, C *obj, std::index_sequence<Indices...>)
+		int call_member(lua_State *state, C *obj, std::index_sequence<Indices...>) noexcept
 		{
 			if constexpr(std::same_as<R, void>)
 			{
@@ -68,7 +67,7 @@ namespace LuaWay
 		}
 
 		template<auto func, typename C, typename R, typename ...Args>
-		int function_wrapper(lua_State *state)
+		int function_wrapper(lua_State *state) noexcept
 		{
 			using vars = hrs::variadic<Args...>;
 			int stack_args_count = lua_gettop(state);
@@ -120,7 +119,7 @@ namespace LuaWay
 		};
 
 		template<typename C>
-		int destructor_wrapper(lua_State *state)
+		int destructor_wrapper(lua_State *state) noexcept
 		{
 			int stack_args_count = lua_gettop(state);
 			if(stack_args_count < 1)
@@ -132,7 +131,7 @@ namespace LuaWay
 		}
 
 		template<typename C, typename ...Args>
-		int constructor_wrapper(lua_State *state)
+		int constructor_wrapper(lua_State *state) noexcept
 		{
 			int stack_args_count = lua_gettop(state);
 			if(stack_args_count < sizeof...(Args) + 1)

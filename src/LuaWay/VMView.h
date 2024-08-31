@@ -15,6 +15,8 @@ namespace LuaWay
 		VMView(VMView &&vm) noexcept;
 		VMView & operator=(const VMView &) = default;
 		VMView & operator=(VMView &&vm) noexcept;
+
+		bool IsMainThread() const noexcept;
 	};
 };
 
