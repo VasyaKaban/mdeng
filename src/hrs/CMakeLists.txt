@@ -57,9 +57,13 @@ elseif(WIN32)
 			stacktrace_impl/winapi/frame.cpp
 			stacktrace_impl/winapi/stacktrace.h
 			stacktrace_impl/winapi/stacktrace.cpp
+			stacktrace_impl/winapi/stacktrace_init.h
+			stacktrace_impl/winapi/stacktrace_init.cpp
 			dynamic_library_impl/winapi/dynamic_library.h
 			dynamic_library_impl/winapi/dynamic_library.cpp
 	)
+
+	target_link_libraries(Hrs PRIVATE Dbghelp)
 endif()
 
 

@@ -1,4 +1,6 @@
 #include "dynamic_library.h"
+#include <libloaderapi.h>
+#include <winnt.h>
 
 namespace hrs
 {

@@ -229,9 +229,13 @@ namespace LuaWay
 
 	Stack<Ref>::Type Stack<Ref>::Retrieve(lua_State *state, int index) noexcept
 	{
+		lua_rawgeti(state, LUA_REGISTRYINDEX, LUA_RIDX_MAINTHREAD);
+		lua_State *main_thread = lua_tothread(state, -1);
+		lua_pop(state, 1);
+
 		lua_pushvalue(state, index);
-		int raw = lua_ref(state, LUA_REGISTRYINDEX);
-		return Ref(state, raw);
+		int raw = luaL_ref(state, LUA_REGISTRYINDEX);
+		return Ref(main_thread, raw);
 	}
 
 	bool Stack<Ref>::ConvertibleFromVm(VmType vm_type) noexcept

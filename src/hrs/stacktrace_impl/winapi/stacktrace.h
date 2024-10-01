@@ -12,6 +12,7 @@ namespace hrs
 
 		class stacktrace
 		{
+			friend class frame;
 		public:
 			using container_t = std::vector<frame>;
 

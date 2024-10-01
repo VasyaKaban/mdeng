@@ -215,7 +215,7 @@ namespace hrs
 	template<static_string haystack, static_string needle>
 	constexpr auto find_cursor_create() noexcept
 	{
-		return find_cursor<haystack, needle, haystack.template find(needle)>{};
+		return find_cursor<haystack, needle, haystack.find(needle)>{};
 	}
 
 	template<static_string haystack, static_string needle>

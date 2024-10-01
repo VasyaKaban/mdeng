@@ -1,6 +1,7 @@
 #pragma once
 
-#include <lua5.1/lua.hpp>
+#include <lua.hpp>
+#include <tuple>
 #include "hrs/meta/enum_meta.hpp"
 
 namespace LuaWay

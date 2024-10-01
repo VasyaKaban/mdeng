@@ -2,6 +2,7 @@
 
 #include <type_traits>
 #include <optional>
+#include <string_view>
 #include "../variadic.hpp"
 #include "../static_string/algorithm.hpp"
 #include "split_namespace.hpp"

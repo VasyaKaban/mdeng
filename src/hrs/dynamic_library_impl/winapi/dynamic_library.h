@@ -1,7 +1,9 @@
 #pragma once
 
 #include "../../non_creatable.hpp"
-#include <libloaderapi,h>
+
+#define NOMINMAX
+#include <Windows.h>
 
 namespace hrs
 {

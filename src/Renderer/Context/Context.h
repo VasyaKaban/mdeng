@@ -5,6 +5,7 @@
 #include <string>
 #include <span>
 #include "hrs/dynamic_library.hpp"
+#include "hrs/expected.hpp"
 #include "hrs/non_creatable.hpp"
 #include "hrs/debug.hpp"
 #include "GlobalLoader.h"

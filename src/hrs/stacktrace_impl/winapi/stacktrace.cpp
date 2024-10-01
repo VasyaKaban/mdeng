@@ -1,6 +1,7 @@
 #include "stacktrace.h"
 #include "frame.h"
-#include <cstdio>
+#include "stacktrace_init.h"
+#include <fstream>
 
 namespace hrs
 {
@@ -70,17 +71,13 @@ namespace hrs
 			if(frames.empty())
 				return false;
 
-			FILE *fd = std::fopen(path.c_str(), "w+");
-			if(!fd)
+			std::ofstream fd;
+			fd.open(path, std::ios::trunc);
+			if(!fd.is_open())
 				return false;
 
-			auto write_res = fwrite(frames.data(), sizeof(frame), frames.size(), fd);
-
-			auto close_res = fclose(fd);
-			if(close_res != 0)
-				return false;
-
-			return write_res == frames.size();
+			fd.write(reinterpret_cast<const char *>(frames.data()), sizeof(frame) * frames.size());
+			return true;
 		}
 	};
 };

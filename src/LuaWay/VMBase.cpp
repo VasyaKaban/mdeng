@@ -1,5 +1,8 @@
 #include "VMBase.h"
 #include "Common.h"
+#include "Stack.h"
+#include "VmType.h"
+#include <lua.hpp>
 
 namespace LuaWay
 {
@@ -100,6 +103,39 @@ namespace LuaWay
 		lua_createtable(state, array_count, table_count);
 		int ref = luaL_ref(state, LUA_REGISTRYINDEX);
 		return Ref(state, ref);
+	}
+
+	Ref VMBase::CreateThread(CFunction c_func) const noexcept
+	{
+		hrs::assert_true_debug(IsOpen(), "Lua VM isn't opened yet!");
+
+		if(!c_func)
+			return {};
+
+		Thread co = lua_newthread(state);
+		if(!co)
+			return {};
+
+		lua_pushcfunction(co, c_func);
+		int _ref = luaL_ref(state, LUA_REGISTRYINDEX);
+		return Ref(state, _ref);
+	}
+
+	Ref VMBase::CreateThread(const Ref &r) const noexcept
+	{
+		hrs::assert_true_debug(IsOpen(), "Lua VM isn't opened yet!");
+
+		VmType vm_type = r.GetType();
+		if(!(vm_type == VmType::CFunction || vm_type == VmType::Function))
+			return {};
+
+		Thread co = lua_newthread(state);
+		if(!co)
+			return {};
+
+		Stack<Ref>::Push(co, r);
+		int _ref = luaL_ref(state, LUA_REGISTRYINDEX);
+		return Ref(state, _ref);
 	}
 
 	CFunction VMBase::SetAtPanic(CFunction at_panic_func) const noexcept
@@ -229,7 +265,7 @@ namespace LuaWay
 	{
 		hrs::assert_true_debug(IsOpen(), "Lua VM isn't opened yet!");
 
-		return luaL_loadfile(state, fpath.c_str());
+		return luaL_loadfile(state, fpath.string().c_str());
 	}
 
 	hrs::expected<FunctionResult, Status> VMBase::do_chunk(Ref env) const noexcept

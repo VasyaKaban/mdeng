@@ -1,5 +1,6 @@
 #pragma once
 
+#include <span>
 #include "hrs/non_creatable.hpp"
 #include "hrs/error.hpp"
 #include "hrs/expected.hpp"

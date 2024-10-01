@@ -1,5 +1,6 @@
 #pragma once
 
+#include <span>
 #include "MemoryType.h"
 #include "MemoryPool.h"
 #include "../Vulkan/InitResult.h"

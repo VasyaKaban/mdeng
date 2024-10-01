@@ -125,3 +125,5 @@ set(SWAPCHAIN_FOLDER_SOURCES
 link_directories(../hrs)
 target_link_libraries(Renderer PRIVATE Hrs)
 target_include_directories(Renderer PUBLIC ../)
+find_package(VulkanHeaders CONFIG)
+target_link_libraries(Renderer PUBLIC Vulkan::Headers)

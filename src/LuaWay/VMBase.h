@@ -43,6 +43,9 @@ namespace LuaWay
 		Ref AllocateUserData(std::size_t size) const noexcept;
 		Ref CreateTable(int array_count, int table_count) const noexcept;
 
+		Ref CreateThread(CFunction c_func) const noexcept;
+		Ref CreateThread(const Ref &r) const noexcept;
+
 		CFunction SetAtPanic(CFunction at_panic_func) const noexcept;
 		void SetAllocator(lua_Alloc allocator, void *data) const noexcept;
 

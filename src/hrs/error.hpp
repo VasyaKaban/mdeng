@@ -1,8 +1,10 @@
 #pragma once
 
+#include <bit>
 #include <type_traits>
 #include <concepts>
 #include <string_view>
+#include <typeinfo>
 #include "meta/enum_meta.hpp"
 
 namespace hrs

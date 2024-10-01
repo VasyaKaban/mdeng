@@ -1,0 +1,8 @@
+{
+  "dependencies": [
+    "luajit",
+    "sdl2",
+    "vulkan",
+    "pkgconf"
+  ]
+}

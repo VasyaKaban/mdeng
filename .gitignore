@@ -1,6 +1,8 @@
 build/*
-out/*
-CMakeLists.txt.user
-src/main.cpp
 docs/*
 garbage/*
+.vs/*
+.cache/*
+.vscode/*
+compile_commands.json
+vcpkg-configuration.json

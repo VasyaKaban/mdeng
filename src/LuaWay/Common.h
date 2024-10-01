@@ -12,13 +12,29 @@ namespace LuaWay
 {
 	namespace detail
 	{
+		template<bool is_ref, typename T>
+		struct ref_select;
+
+		template<typename T>
+		struct ref_select<false, T>
+		{
+			using type = T;
+		};
+
+		template<typename T>
+		struct ref_select<true, T>
+		{
+			using type = hrs::ref<T>;
+		};
+
+		template<typename T>
+		using ref_select_t = ref_select<std::is_reference_v<T>, T>::type;
+
 		template<Retrievable T>
 		struct retrieve_value_type_for_non_ref_wrapper
 		{
 			using plain_t = decltype(Stack<T>::Retrieve(static_cast<lua_State *>(nullptr), -1));
-			using out_t = std::conditional_t<std::is_reference_v<plain_t>,
-											 hrs::ref<plain_t>,
-											 plain_t>;
+			using out_t = ref_select_t<plain_t>;
 		};
 
 		template<Retrievable T>

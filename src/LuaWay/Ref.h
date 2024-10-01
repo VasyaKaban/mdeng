@@ -1,6 +1,10 @@
 #pragma once
 
+#include <lua.hpp>
 #include <optional>
+#include "LuaWay/VmType.h"
+#include "Stack.h"
+#include "VmType.h"
 #include "hrs/expected.hpp"
 #include "hrs/debug.hpp"
 #include "hrs/ref.hpp"
@@ -79,6 +83,9 @@ namespace LuaWay
 		template<Retrievable T>
 		auto As() const noexcept(NoexceptRetrievable<T>);
 
+		template< Pushable ...Args>
+		hrs::expected<FunctionResult, Status> Resume(Args &&...args) const;
+
 		RefIterator begin() const noexcept;
 		RefIterator end() const noexcept;
 
@@ -112,21 +119,21 @@ namespace LuaWay
 		return Stack<T>::Retrieve(state, -1);
 	}
 
-	template<typename Call, Pushable ...Args>
-		requires std::same_as<Call, RefCallPlain> || std::same_as<Call, RefCallProtected>
+	template<typename CallType, Pushable ...Args>
+		requires std::same_as<CallType, RefCallPlain> || std::same_as<CallType, RefCallProtected>
 	auto Ref::Call(Args &&...args) const
 	{
 		hrs::assert_true_debug(IsCreated(), "Lua reference isn't created yet!");
 
-		using Out = std::conditional_t<std::same_as<Call, RefCallPlain>,
+		using Out = std::conditional_t<std::same_as<CallType, RefCallPlain>,
 									   FunctionResult,
 									   hrs::expected<FunctionResult, Status>>;
 
-		lua_getref(state, ref);
-		((Stack<std::remove_cvref_t<Args>>::Push(std::forward<Args>(args))), ...);
+		lua_rawgeti(state, LUA_REGISTRYINDEX, ref);
 		int pre_push_index = lua_gettop(state);
+		((Stack<std::remove_cvref_t<Args>>::Push(std::forward<Args>(args))), ...);
 		int post_call_index;
-		if constexpr(std::same_as<Call, RefCallProtected>)
+		if constexpr(std::same_as<CallType, RefCallProtected>)
 		{
 			int res = lua_pcall(state, sizeof...(args), LUA_MULTRET, 0);
 			post_call_index = lua_gettop(state);
@@ -283,5 +290,50 @@ namespace LuaWay
 		auto out_val = detail::retrieve_value_for_non_ref_wrapper<T>(state, -1);
 		lua_pop(state, 1);
 		return std::optional<out_t>{out_val};
+	}
+
+	template< Pushable ...Args>
+	hrs::expected<FunctionResult, Status> Ref::Resume(Args &&...args) const
+	{
+		hrs::assert_true_debug(IsCreated(), "Lua reference isn't created yet!");
+
+		hrs::assert_true_debug(Holds(VmType::Thread), "Only threads can be resumed!");
+		lua_rawgeti(state, LUA_REGISTRYINDEX, ref);
+		lua_State *co = lua_tothread(state, -1);
+		lua_pop(state, 1);
+
+		int pre_push_index = lua_gettop(co);
+		if(pre_push_index == 1)
+		{
+			VmType vm_type = LuaWay::GetType(co, -1);
+			if(vm_type == VmType::CFunction || vm_type == VmType::Function)
+				pre_push_index = 0;
+		}
+
+		((Stack<Args>::Push(co, std::forward<Args>(args))), ...);
+		int res = lua_resume(co, sizeof...(Args));
+		int post_call_index = lua_gettop(co);
+		switch(res)
+		{
+			case 0:
+			case LUA_YIELD:
+				{
+					FunctionResult res;
+					int result_count = post_call_index - pre_push_index;
+					res.reserve(result_count);
+					for(int i = 1; i <= result_count; i++)
+						res.push_back(Stack<Ref>::Retrieve(co, -i));
+
+					lua_settop(co, pre_push_index);
+					return res;
+				}
+			default:
+				{
+					Status status(static_cast<StatusCode>(res), lua_tostring(co, -1));
+					lua_settop(co, pre_push_index);
+					return status;
+				}
+				break;
+		}
 	}
 };

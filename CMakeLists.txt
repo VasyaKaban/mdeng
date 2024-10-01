@@ -21,11 +21,28 @@ add_subdirectory(src/LuaWay)
 #		${CMAKE_CURRENT_SOURCE_DIR}/src/out.h
 #		vkQueueSubmit vkCreateFence vkCreateSemaphore vkCreateBuffer vkCreateImage vkCreateSwapchainKHR)
 
-add_executable(${PROJECT_NAME} src/main.cpp)
+add_executable(${PROJECT_NAME})
+
+target_sources(
+${PROJECT_NAME}
+    PUBLIC
+	    src/main.cpp
+)
 
 #add_dependencies(${PROJECT_NAME} generated_loader)
 
-set(CMAKE_CXX_FLAGS_DEBUG "-rdynamic -g")
+#if(MSVC)
+#  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Zi")
+#else()
+#  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -rdynamic -g")
+#endif()
+#set(CMAKE_CXX_FLAGS_DEBUG "-rdynamic -g")
+
+target_include_directories(${PROJECT_NAME}
+	PRIVATE
+		hrs/
+		Renderer/
+		LuaWay/)
 
 target_link_libraries(${PROJECT_NAME}
 	                    PRIVATE Hrs

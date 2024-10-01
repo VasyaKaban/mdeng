@@ -1,7 +1,7 @@
 #pragma once
 
 #include <string>
-#include <Windows.h>
+#include "stacktrace_init.h"
 
 namespace hrs
 {
@@ -24,7 +24,7 @@ namespace hrs
 			const native_symbol_t native_handle() const noexcept;
 
 		private:
-			std::string get_symbol_info(bool get_only_symbol_name, bool demangle);
+			std::string get_symbol_info(bool get_only_symbol_name, bool demangle) const;
 		private:
 			native_symbol_t symbol;
 		};

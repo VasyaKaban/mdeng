@@ -1,0 +1,106 @@
+{
+    "version": 8,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 28,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "Windows-debug",
+            "displayName": "Windows debug preset",
+            "description": "Windows debug preset with Ninja generator",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/windows/debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+                "CMAKE_C_COMPILER": "cl",
+                "CMAKE_CXX_COMPILER": "cl",
+                "CMAKE_CXX_FLAGS": "/EHsc /utf-8 /Zi"
+            },
+            "architecture": {
+                "value": "x64",
+                "strategy": "external"
+            },
+            "vendor": {
+                "microsoft.com/VisualStudioSettings/CMake/1.0": {
+                    "hostOS": [ "Windows" ]
+                }   
+            }
+        },
+        {
+            "name": "Windows-release",
+            "displayName": "Windows release preset",
+            "description": "Windows release preset with Ninja generator",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/windows/release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+                "CMAKE_C_COMPILER": "cl",
+                "CMAKE_CXX_COMPILER": "cl",
+                "CMAKE_CXX_FLAGS": "/EHsc /utf-8 /Zi"
+            },
+            "architecture": {
+                "value": "x64",
+                "strategy": "external"
+            },
+            "vendor": {
+                "microsoft.com/VisualStudioSettings/CMake/1.0": {
+                    "hostOS": [ "Windows" ]
+                }   
+            }
+        },
+        {
+            "name": "Linux-debug",
+            "displayName": "Linux debug preset",
+            "description": "Linux debug preset with Ninja generator",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/linux/debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+                "CMAKE_C_COMPILER": "gcc",
+                "CMAKE_CXX_COMPILER": "g++",
+                "CMAKE_CXX_FLAGS": "-rdynamic -g"
+            }
+        },
+        {
+            "name": "Linux-release",
+            "displayName": "Linux release preset",
+            "description": "Linux release preset with Ninja generator",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/linux/release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+                "CMAKE_C_COMPILER": "gcc",
+                "CMAKE_CXX_COMPILER": "g++",
+                "CMAKE_CXX_FLAGS": "-rdynamic"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "Windows Debug",
+            "configurePreset": "Windows-debug"
+        },
+        {
+            "name": "Windows Release",
+            "configurePreset": "Windows-debug"
+        },
+        {
+            "name": "Linux Debug",
+            "configurePreset": "Linux-debug"
+        },
+        {
+            "name": "Linux Release",
+            "configurePreset": "Linux-release"
+        }
+    ]
+}

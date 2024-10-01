@@ -1,6 +1,6 @@
 #pragma once
 
-#include <lua5.1/lua.hpp>
+#include <lua.hpp>
 #include <utility>
 
 namespace LuaWay

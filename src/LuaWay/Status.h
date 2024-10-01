@@ -1,7 +1,7 @@
 #pragma once
 
 #include <string>
-#include <lua5.1/lua.hpp>
+#include <lua.hpp>
 
 namespace LuaWay
 {

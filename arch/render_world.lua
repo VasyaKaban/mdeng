@@ -15,6 +15,9 @@ World =
 {
 	global_descriptor_set_0 = nil,
 	mesh_instance_cluster_list = nil,
+	wait_read_fences[FRAMES], --signal when you render (each frame), wait before enque transfer
+	wait_write_semaphores[FRAMES], --signal when you enque transfer, wait before render
+	wait_read_semaphores[FRAMES], --signal when you render(each frame), wait before enque transfer
 	renderpasses = {}
 }
 
@@ -60,6 +63,7 @@ RenderGroup =
 	mesh_instance_cluster_count = 12345,
 	mesh_instance_count = 12345,
 	mesh_instance_cluster_begin = nil,
+	mesh_instance_cluster_end = nil,
 	shader_object_type = SATTIC/DYNAMIC,
 	shader_index_buffer_begin = 12345,
 	cull_index_offset = 0,--for culling and for render(checking whether we need to render this group or not)
@@ -79,6 +83,7 @@ MeshInstanceCluster =
 MeshInstance =
 {
 	cull_simplex = nil,
+	cull_object = nil,
 	cull_region = nil,
 	data = nil,
 	object_type = STATIC/DYNAMIC,
@@ -87,6 +92,14 @@ MeshInstance =
 		--do something with data
 		return self.data
 	end
+}
+
+CullRegion = 
+{
+	//cube
+	is_culled = true/false --set value in a culling pass and use this value in mesh instance culling when cull_region is same
+	--set false after culling(in a different thread -> while rendering)
+	--same for CullObject
 }
 
 function culled(instance, camera)
@@ -122,3 +135,53 @@ function cull_clusters(world, camera)
 		end
 	end
 end
+
+
+DataQueue(Dynamic):
+	adds:
+		in: index_ptr, data
+	updates:
+		in: index, data
+	removes:
+		in: index
+	
+	enqued_adds -> adds without allocated index(if there are no free indices)
+	each remove free space for enqued_add
+	
+
+no resize:
+	process updates(and adds as well)
+
+with resize:
+	allocate new 
+	copy from old
+	free old
+	process updates
+	process enqued_adds
+	
+Write must be externally synchronized!!!
+	
+DataQueue(Static):
+	adds:
+		in: index_ptr, data
+	updates:
+		in: index, data
+	removes:
+		in: index
+	
+	enqued_adds -> adds without allocated index(if there are no free indices)
+	each remove free space for enqued_add
+	
+no resize:
+	copy to transfer
+	wait rw_semaphore
+	copy from transfer(updates and adds)
+	set write_semaphore
+	
+with resize:
+	copy to transfer
+	wait rw_semaphore
+	allocate new
+	copy from old
+	copy from transfer
+	set write_semaphore

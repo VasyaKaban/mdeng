@@ -30,13 +30,15 @@ target_sources(
 		VMView.cpp
 )
 
-find_package(Lua51)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(LUAJIT REQUIRED IMPORTED_TARGET luajit)
 
 link_directories(../hrs)
 target_link_libraries(
 	LuaWay
-	PRIVATE ${LUA_LIBRARIES}
+	PRIVATE ${LUAJIT_LINK_LIBRARIES}
 	PRIVATE Hrs
 )
 
 target_include_directories(LuaWay PUBLIC ../)
+target_include_directories(LuaWay PUBLIC ${LUAJIT_INCLUDE_DIRS})

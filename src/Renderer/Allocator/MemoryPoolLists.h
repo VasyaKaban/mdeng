@@ -1,6 +1,7 @@
 #pragma once
 
 #include <list>
+#include <array>
 #include "hrs/non_creatable.hpp"
 #include "MemoryPool.h"
 
