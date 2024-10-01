@@ -4,7 +4,7 @@
 
 namespace LuaWay
 {
-	class Ref;
+    class Ref;
 
-	using FunctionResult = std::vector<Ref>;
+    using FunctionResult = std::vector<Ref>;
 };

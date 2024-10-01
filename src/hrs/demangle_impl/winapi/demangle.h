@@ -4,9 +4,8 @@
 
 namespace hrs
 {
-	namespace winapi
-	{
-		std::string demangle(const char *mangled_name);
-	};
+    namespace winapi
+    {
+        std::string demangle(const char* mangled_name);
+    };
 };
-

@@ -7,4 +7,3 @@ namespace FireLand
 };
 
 #undef LOADER_GEN_LIST
-

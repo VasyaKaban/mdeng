@@ -12,9 +12,7 @@ namespace hrs
     {
         namespace detail
         {
-            class stacktrace_init
-                : hrs::non_copyable,
-                  hrs::non_movable
+            class stacktrace_init : hrs::non_copyable, hrs::non_movable
             {
             public:
                 stacktrace_init();
@@ -24,10 +22,9 @@ namespace hrs
                 PSYMBOL_INFO get_symbol_info() const noexcept;
 
                 bool is_created() const noexcept;
-
             private:
                 HANDLE process;
-                PSYMBOL_INFO symbol_info; 
+                PSYMBOL_INFO symbol_info;
             };
         };
     };

@@ -1,8 +1,8 @@
 #pragma once
+#include "../Vulkan/LoaderInitResult.h"
+#include "../Vulkan/VulkanInclude.h"
 #include "codegen/InstanceLoader_gen.h"
 #include <optional>
-#include "../Vulkan/VulkanInclude.h"
-#include "../Vulkan/LoaderInitResult.h"
 
 namespace FireLand
 {

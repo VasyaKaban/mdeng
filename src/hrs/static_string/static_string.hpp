@@ -1,354 +1,338 @@
 #pragma once
 
-#include <cstddef>
-#include <concepts>
-#include <iterator>
 #include "../instantiation.hpp"
 #include "../one_of.hpp"
+#include <concepts>
+#include <cstddef>
+#include <iterator>
 
 namespace hrs
 {
-	template<typename C, std::size_t N>
-	struct static_string_data
-	{
-		using type = C[N];
-	};
+    template<typename C, std::size_t N>
+    struct static_string_data
+    {
+        using type = C[N];
+    };
 
-	template<typename C>
-	struct static_string_data<C, 0>
-	{
-		using type = std::byte;
-	};
+    template<typename C>
+    struct static_string_data<C, 0>
+    {
+        using type = std::byte;
+    };
 
-	template<typename C, std::size_t N>
-	using static_string_data_t = static_string_data<C, N>::type;
+    template<typename C, std::size_t N>
+    using static_string_data_t = static_string_data<C, N>::type;
 
-	template<std::size_t Start>
-	struct static_string_start {};
+    template<std::size_t Start>
+    struct static_string_start
+    {};
 
-	template<typename C>
-	concept char_type = one_of_type<C, char, wchar_t, char8_t, char16_t, char32_t>;
+    template<typename C>
+    concept char_type = one_of_type<C, char, wchar_t, char8_t, char16_t, char32_t>;
 
-	template<char_type C, std::size_t N>
-	struct static_string
-	{
-		constexpr static std::size_t npos = N;
-		constexpr static std::size_t size = N;
-		using char_t = C;
-		using iterator = const C *;
-		using reverse_iterator = std::reverse_iterator<const C *>;
+    template<char_type C, std::size_t N>
+    struct static_string
+    {
+        constexpr static std::size_t npos = N;
+        constexpr static std::size_t size = N;
+        using char_t = C;
+        using iterator = const C*;
+        using reverse_iterator = std::reverse_iterator<const C*>;
+    private:
+        template<char_type Ch, std::size_t M>
+        friend class static_string;
 
-	private:
-		template<char_type Ch, std::size_t M>
-		friend class static_string;
+        constexpr static_string() = default;
+    public:
+        constexpr static_string(const C (&_data)[N + 1]) noexcept
+        {
+            if constexpr(size != 0)
+                for(std::size_t i = 0; i < N; i++)
+                    data[i] = _data[i];
+            else
+                data = std::byte{0};
+        }
 
-		constexpr static_string() = default;
-	public:
+        template<std::size_t M, std::size_t Start>
+        requires(M >= Start + N)
+        constexpr static_string(static_string<C, M> str, static_string_start<Start> start) noexcept
+        {
+            if constexpr(size != 0)
+                for(std::size_t i = 0; i < N; i++)
+                    data[i] = str.data[Start + i];
+            else
+                data = std::byte{0};
+        }
 
-		constexpr static_string(const C (&_data)[N + 1]) noexcept
-		{
-			if constexpr(size != 0)
-			{
-				for(std::size_t i = 0; i < N; i++)
-					data[i] = _data[i];
-			}
-			else
-				data = std::byte{0};
-		}
+        template<std::size_t M>
+        constexpr bool operator==(const static_string<C, M>& s) const noexcept
+        {
+            if constexpr(size != M)
+                return false;
+            else if constexpr(size != 0)
+            {
+                for(std::size_t i = 0; i < N; i++)
+                    if(data[i] != s.data[i])
+                        return false;
 
-		template<std::size_t M, std::size_t Start>
-			requires (M >= Start + N)
-		constexpr static_string(static_string<C, M> str, static_string_start<Start> start) noexcept
-		{
-			if constexpr(size != 0)
-			{
-				for(std::size_t i = 0; i < N; i++)
-					data[i] = str.data[Start + i];
-			}
-			else
-				data = std::byte{0};
-		}
+                return true;
+            }
+            else
+                return true;
+        }
 
-		template<std::size_t M>
-		constexpr bool operator==(const static_string<C, M> &s) const noexcept
-		{
-			if constexpr(size != M)
-				return false;
-			else if constexpr(size != 0)
-			{
-				for(std::size_t i = 0; i < N; i++)
-					if(data[i] != s.data[i])
-						return false;
+        template<std::size_t M>
+        constexpr bool operator==(const C (&s)[M]) const noexcept
+        {
+            return operator==(static_string<C, M - 1>(s));
+        }
 
-				return true;
-			}
-			else
-				return true;
-		}
+        //template<auto str, std::size_t Start = 0>
+        //	requires hrs::non_type_instantiation<decltype(str), static_string>
+        template<std::size_t Start = 0, std::size_t M>
+        constexpr std::size_t find(const static_string<C, M>& str) const noexcept
+        {
+            //constexpr std::size_t M = decltype(str)::size;
+            if constexpr(M > N - Start)
+                return npos;
+            else
+            {
+                for(std::size_t i = Start; i < N; i++)
+                {
+                    bool found = true;
+                    std::size_t k = i;
+                    for(std::size_t j = 0; j < M; j++)
+                    {
+                        if(data[k] != str.data[j])
+                            if(N - j < i)
+                                return npos;
+                            else
+                                found = false;
+                        else if(j == M - 1)
+                            return i;
+                        else if(k + 1 == N)
+                            return npos;
+                        else
+                            k++;
+                    }
 
-		template<std::size_t M>
-		constexpr bool operator==(const C (&s)[M]) const noexcept
-		{
-			return operator==(static_string<C, M - 1>(s));
-		}
+                    if(found)
+                        return i;
+                }
 
-		//template<auto str, std::size_t Start = 0>
-		//	requires hrs::non_type_instantiation<decltype(str), static_string>
-		template<std::size_t Start = 0, std::size_t M>
-		constexpr std::size_t find(const static_string<C, M> &str) const noexcept
-		{
-			//constexpr std::size_t M = decltype(str)::size;
-			if constexpr(M > N - Start)
-				return npos;
-			else
-			{
-				for(std::size_t i = Start; i < N; i++)
-				{
-					bool found = true;
-					std::size_t k = i;
-					for(std::size_t j = 0; j < M; j++)
-					{
-						if(data[k] != str.data[j])
-						{
-							if(N - j < i)
-								return npos;
-							else
-								found = false;
-						}
-						else
-						{
-							if(j == M - 1)
-								return i;
-							else if(k + 1 == N)
-								return npos;
-							else
-								k++;
-						}
-					}
+                return npos;
+            }
+        }
 
-					if(found)
-						return i;
-				}
+        template<std::size_t Start = 0, std::size_t M>
+        constexpr std::size_t find(const C (&s)[M]) const noexcept
+        {
+            return find<Start>(static_string<C, M - 1>(s));
+        }
 
-				return npos;
-			}
-		}
+        template<std::size_t Start = 0, std::size_t M>
+        constexpr iterator find_it(const static_string<C, M>& str) const noexcept
+        {
+            std::size_t index = find<Start>(str);
+            if(index == npos)
+                return end();
+            else
+                return iterator(data + index);
+        }
 
-		template<std::size_t Start = 0, std::size_t M>
-		constexpr std::size_t find(const C (&s)[M]) const noexcept
-		{
-			return find<Start>(static_string<C, M - 1>(s));
-		}
+        template<std::size_t Start = 0, std::size_t M>
+        constexpr iterator find_it(const C (&s)[M]) const noexcept
+        {
+            return find_it<Start>(static_string<C, M - 1>(s));
+        }
 
-		template<std::size_t Start = 0, std::size_t M>
-		constexpr iterator find_it(const static_string<C, M> &str) const noexcept
-		{
-			std::size_t index = find<Start>(str);
-			if(index == npos)
-				return end();
-			else
-				return iterator(data + index);
-		}
+        template<std::size_t M>
+        constexpr bool starts_with(const static_string<C, M>& str) const noexcept
+        {
+            if constexpr(M > N)
+                return false;
+            else
+            {
+                for(std::size_t i = 0; i < M; i++)
+                    if(data[i] != str.data[i])
+                        return false;
 
-		template<std::size_t Start = 0, std::size_t M>
-		constexpr iterator find_it(const C (&s)[M]) const noexcept
-		{
-			return find_it<Start>(static_string<C, M - 1>(s));
-		}
+                return true;
+            }
+        }
 
-		template<std::size_t M>
-		constexpr bool starts_with(const static_string<C, M> &str) const noexcept
-		{
-			if constexpr(M > N)
-				return false;
-			else
-			{
-				for(std::size_t i = 0; i < M; i++)
-					if(data[i] != str.data[i])
-						return false;
+        template<std::size_t M>
+        constexpr bool starts_with(const C (&s)[M]) const noexcept
+        {
+            return starts_with(static_string<C, M - 1>(s));
+        }
 
-				return true;
-			}
-		}
+        template<std::size_t M>
+        constexpr bool ends_with(const static_string<C, M>& str) const noexcept
+        {
+            if constexpr(M > N)
+                return false;
+            else
+            {
+                for(std::size_t i = N - M; i < N; i++)
+                    if(data[i] != str.data[i])
+                        return false;
 
-		template<std::size_t M>
-		constexpr bool starts_with(const C (&s)[M]) const noexcept
-		{
-			return starts_with(static_string<C, M - 1>(s));
-		}
+                return true;
+            }
+        }
 
-		template<std::size_t M>
-		constexpr bool ends_with(const static_string<C, M> &str) const noexcept
-		{
-			if constexpr(M > N)
-				return false;
-			else
-			{
-				for(std::size_t i = N - M; i < N; i++)
-					if(data[i] != str.data[i])
-						return false;
+        template<std::size_t M>
+        constexpr bool ends_with(const C (&s)[M]) const noexcept
+        {
+            return ends_with(static_string<C, M - 1>(s));
+        }
 
-				return true;
-			}
-		}
+        template<std::size_t M>
+        constexpr bool contains(const static_string<C, M>& str) const noexcept
+        {
+            if constexpr(M > N)
+                return false;
+            else
+                return find(str) != npos;
+        }
 
-		template<std::size_t M>
-		constexpr bool ends_with(const C (&s)[M]) const noexcept
-		{
-			return ends_with(static_string<C, M - 1>(s));
-		}
+        template<std::size_t M>
+        constexpr bool contains(const C (&s)[M]) const noexcept
+        {
+            return contains(static_string<C, M - 1>(s));
+        }
 
-		template<std::size_t M>
-		constexpr bool contains(const static_string<C, M> &str) const noexcept
-		{
-			if constexpr(M > N)
-				return false;
-			else
-				return find(str) != npos;
-		}
+        template<std::size_t M>
+        constexpr static_string<C, N + M>
+        operator+(const hrs::static_string<C, M>& str) const noexcept
+        {
+            static_string<C, N + M> out_str;
 
-		template<std::size_t M>
-		constexpr bool contains(const C (&s)[M]) const noexcept
-		{
-			return contains(static_string<C, M - 1>(s));
-		}
+            if constexpr(size != 0)
+                for(std::size_t i = 0; i < N; i++)
+                    out_str.data[i] = data[i];
 
-		template<std::size_t M>
-		constexpr static_string<C, N + M> operator+(const hrs::static_string<C, M> &str) const noexcept
-		{
-			static_string<C, N + M> out_str;
+            if constexpr(M != 0)
+                for(std::size_t i = N; i < N + M; i++)
+                    out_str.data[i] = str.data[i - N];
 
-			if constexpr(size != 0)
-			{
-				for(std::size_t i = 0; i < N; i++)
-					out_str.data[i] = data[i];
-			}
+            return out_str;
+        }
 
-			if constexpr(M != 0)
-			{
-				for(std::size_t i = N; i < N + M; i++)
-					out_str.data[i] = str.data[i - N];
-			}
+        template<std::size_t M>
+        constexpr auto operator+(const C (&s)[M]) const noexcept
+        {
+            return operator+(static_string<C, M - 1>(s));
+        }
 
-			return out_str;
-		}
+        template<std::size_t Count>
+        requires(N >= Count)
+        constexpr auto substr_front() const noexcept
+        {
+            return substr<0, Count>();
+        }
 
-		template<std::size_t M>
-		constexpr auto operator+(const C (&s)[M]) const noexcept
-		{
-			return operator+(static_string<C, M - 1>(s));
-		}
+        template<std::size_t Count>
+        requires(N >= Count)
+        constexpr auto substr_back() const noexcept
+        {
+            return substr<N - Count, Count>();
+        }
 
-		template<std::size_t Count>
-			requires(N >= Count)
-		constexpr auto substr_front() const noexcept
-		{
-			return substr<0, Count>();
-		}
+        template<std::size_t Start, std::size_t Count>
+        requires(Start + Count <= N)
+        constexpr auto substr() const noexcept
+        {
+            return static_string<C, Count>(*this, static_string_start<Start>{});
+        }
 
-		template<std::size_t Count>
-			requires(N >= Count)
-		constexpr auto substr_back() const noexcept
-		{
-			return substr<N - Count, Count>();
-		}
+        constexpr const C* const get_ptr() const noexcept
+        {
+            return data;
+        }
 
-		template<std::size_t Start, std::size_t Count>
-			requires(Start + Count <= N)
-		constexpr auto substr() const noexcept
-		{
-			return static_string<C, Count>(*this, static_string_start<Start>{});
-		}
+        constexpr const char& operator[](std::size_t index) const noexcept
+        {
+            return data[index];
+        }
 
-		constexpr const C * const get_ptr() const noexcept
-		{
-			return data;
-		}
+        constexpr static bool is_empty() noexcept
+        {
+            return size == 0;
+        }
 
-		constexpr const char & operator[](std::size_t index) const noexcept
-		{
-			return data[index];
-		}
+        constexpr iterator begin() noexcept
+        {
+            if constexpr(size == 0)
+                return iterator(nullptr);
+            else
+                return iterator(data);
+        }
 
-		constexpr static bool is_empty() noexcept
-		{
-			return size == 0;
-		}
+        constexpr iterator begin() const noexcept
+        {
+            if constexpr(size == 0)
+                return iterator(nullptr);
+            else
+                return iterator(data);
+        }
 
-		constexpr iterator begin() noexcept
-		{
-			if constexpr(size == 0)
-				return iterator(nullptr);
-			else
-				return iterator(data);
-		}
+        constexpr iterator end() noexcept
+        {
+            if constexpr(size == 0)
+                return iterator(nullptr);
+            else
+                return iterator(data + size);
+        }
 
-		constexpr iterator begin() const noexcept
-		{
-			if constexpr(size == 0)
-				return iterator(nullptr);
-			else
-				return iterator(data);
-		}
+        constexpr iterator end() const noexcept
+        {
+            if constexpr(size == 0)
+                return iterator(nullptr);
+            else
+                return iterator(data + size);
+        }
 
-		constexpr iterator end() noexcept
-		{
-			if constexpr(size == 0)
-				return iterator(nullptr);
-			else
-				return iterator(data + size);
-		}
+        constexpr reverse_iterator rbegin() noexcept
+        {
+            if constexpr(size == 0)
+                return reverse_iterator(iterator(nullptr));
+            else
+                return reverse_iterator(end());
+        }
 
-		constexpr iterator end() const noexcept
-		{
-			if constexpr(size == 0)
-				return iterator(nullptr);
-			else
-				return iterator(data + size);
-		}
+        constexpr reverse_iterator rbegin() const noexcept
+        {
+            if constexpr(size == 0)
+                return reverse_iterator(iterator(nullptr));
+            else
+                return reverse_iterator(end());
+        }
 
-		constexpr reverse_iterator rbegin() noexcept
-		{
-			if constexpr(size == 0)
-				return reverse_iterator(iterator(nullptr));
-			else
-				return reverse_iterator(end());
-		}
+        constexpr reverse_iterator rend() noexcept
+        {
+            if constexpr(size == 0)
+                return reverse_iterator(iterator(nullptr));
+            else
+                return reverse_iterator(begin());
+        }
 
-		constexpr reverse_iterator rbegin() const noexcept
-		{
-			if constexpr(size == 0)
-				return reverse_iterator(iterator(nullptr));
-			else
-				return reverse_iterator(end());
-		}
+        constexpr reverse_iterator rend() const noexcept
+        {
+            if constexpr(size == 0)
+                return reverse_iterator(iterator(nullptr));
+            else
+                return reverse_iterator(begin());
+        }
 
-		constexpr reverse_iterator rend() noexcept
-		{
-			if constexpr(size == 0)
-				return reverse_iterator(iterator(nullptr));
-			else
-				return reverse_iterator(begin());
-		}
+        static_string_data_t<C, N> data;
+    };
 
-		constexpr reverse_iterator rend() const noexcept
-		{
-			if constexpr(size == 0)
-				return reverse_iterator(iterator(nullptr));
-			else
-				return reverse_iterator(begin());
-		}
+    template<typename C, std::size_t N>
+    static_string(const C (&)[N]) -> static_string<C, N - 1>;
 
-		static_string_data_t<C, N> data;
-	};
-
-	template<typename C, std::size_t N>
-	static_string(const C (&)[N]) -> static_string<C, N - 1>;
-
-
-
-
-	/*constexpr void test_f() noexcept
+    /*constexpr void test_f() noexcept
 	{
 		auto res = split_and_exec<haystack, needle>([](auto val)
 		{
@@ -366,8 +350,7 @@ namespace hrs
 		});
 	}*/
 
-
-	/*constexpr auto spl1 = split_cursor_create<haystack, needle>();
+    /*constexpr auto spl1 = split_cursor_create<haystack, needle>();
 	static_assert(spl1.value == "Hello");
 
 	constexpr auto spl2 = spl1.next();

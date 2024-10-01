@@ -1,13 +1,13 @@
 #pragma once
 
-#include <cstdint>
 #include "VulkanInclude.h"
+#include <cstdint>
 
 namespace FireLand
 {
-	struct QueueFamilyIndex
-	{
-		VkQueue queue;
-		std::uint32_t family_index;
-	};
+    struct QueueFamilyIndex
+    {
+        VkQueue queue;
+        std::uint32_t family_index;
+    };
 };

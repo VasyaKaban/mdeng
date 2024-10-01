@@ -5,12 +5,11 @@
 
 namespace FireLand
 {
-	struct TransferImageOpRegion
-	{
-		VkImageSubresourceLayers subresource_layers;
-		VkExtent3D image_extent;
-		VkDeviceSize data_offset;
-		std::size_t data_index;
-	};
+    struct TransferImageOpRegion
+    {
+        VkImageSubresourceLayers subresource_layers;
+        VkExtent3D image_extent;
+        VkDeviceSize data_offset;
+        std::size_t data_index;
+    };
 };
-

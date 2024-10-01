@@ -2,8 +2,9 @@
 
 namespace hrs
 {
-	struct resource
-	{
-		virtual ~resource() {}
-	};
+    struct resource
+    {
+        virtual ~resource()
+        {}
+    };
 };
